@@ -20,7 +20,7 @@ FILE_DB_MENU    = "database_menu.json"
 FILE_DB_CABANG  = "database_cabang.json"
 FILE_EXCEL_REP  = "LAPORAN_HARIAN_PRO.xlsx"
 
-# DATA DEFAULT
+# DATA DEFAULT (Jika file belum ada)
 DEFAULT_CABANG = {"1": "Gerobak Alun-Alun", "2": "Gerobak Stasiun", "3": "Gerobak Pasar"}
 DEFAULT_MENU   = {
     "Strawberry Milk": 10000, "Coklat Milk": 12000,
@@ -166,10 +166,12 @@ def main():
         nama_aktif = st.session_state['user_nama']
         pin_aktif  = st.session_state['user_pin']
         
+        # MENU OWNER
         if nama_aktif == "OWNER":
             st.error("🔧 **MENU SUPER ADMIN**")
-            tab1, tab2, tab3 = st.tabs(["🛒 Reset Shift", "👥 Kelola Staff", "⚙️ Atur Menu"])
+            tab1, tab2, tab3 = st.tabs(["🛒 Reset Shift", "👥 Kelola Staff", "⚙️ Cabang & Menu"])
             
+            # 1. RESET SHIFT
             with tab1:
                 st.write("Reset Data Shift:")
                 db_gerobak_bos = load_json(FILE_DB_GEROBAK)
@@ -182,6 +184,8 @@ def main():
                         del db_gerobak_bos[g_nama]
                         save_json(FILE_DB_GEROBAK, db_gerobak_bos)
                         st.rerun()
+            
+            # 2. KELOLA STAFF
             with tab2:
                 data_staff_bos = load_json(FILE_DB_STAFF)
                 if data_staff_bos:
@@ -190,22 +194,53 @@ def main():
                     pilih_hapus = st.selectbox("Pilih Staff:", list_pilihan)
                     if st.button("Hapus Staff Terpilih"):
                         if hapus_staff(pilih_hapus.split(" - ")[-1]): st.rerun()
+            
+            # 3. KELOLA CABANG & MENU (FITUR BARU)
             with tab3:
-                st.subheader("1. Ubah Nama Cabang")
-                with st.form("form_ganti_cabang"):
-                    c1 = st.text_input("Gerobak 1", value=DATA_GEROBAK["1"])
-                    c2 = st.text_input("Gerobak 2", value=DATA_GEROBAK["2"])
-                    c3 = st.text_input("Gerobak 3", value=DATA_GEROBAK["3"])
-                    if st.form_submit_button("💾 Simpan Nama Cabang"):
-                        DATA_GEROBAK["1"] = c1
-                        DATA_GEROBAK["2"] = c2
-                        DATA_GEROBAK["3"] = c3
+                # --- A. KELOLA CABANG ---
+                st.subheader("🏢 Kelola Cabang / Gerobak")
+                
+                # Tampilkan Tabel Cabang
+                df_cabang = pd.DataFrame(list(DATA_GEROBAK.items()), columns=['ID', 'Nama Cabang'])
+                st.dataframe(df_cabang, use_container_width=True)
+                
+                # Form Tambah Cabang
+                col_add1, col_add2 = st.columns([3, 1])
+                with col_add1:
+                    cabang_baru_nama = st.text_input("Nama Cabang Baru")
+                with col_add2:
+                    st.write("") # Spacer
+                    st.write("")
+                    if st.button("➕ Tambah"):
+                        if cabang_baru_nama:
+                            # Generate ID Baru (Cari ID angka terbesar + 1)
+                            ids = [int(k) for k in DATA_GEROBAK.keys() if k.isdigit()]
+                            next_id = str(max(ids) + 1) if ids else "1"
+                            
+                            DATA_GEROBAK[next_id] = cabang_baru_nama
+                            save_json(FILE_DB_CABANG, DATA_GEROBAK)
+                            st.success(f"Cabang {cabang_baru_nama} Ditambahkan!")
+                            st.rerun()
+                
+                # Form Hapus Cabang
+                cabang_hapus_nama = st.selectbox("Pilih Cabang untuk Dihapus:", list(DATA_GEROBAK.values()))
+                if st.button("❌ Hapus Cabang Terpilih"):
+                    # Cari ID dari nama
+                    key_to_delete = None
+                    for k, v in DATA_GEROBAK.items():
+                        if v == cabang_hapus_nama:
+                            key_to_delete = k
+                            break
+                    if key_to_delete:
+                        del DATA_GEROBAK[key_to_delete]
                         save_json(FILE_DB_CABANG, DATA_GEROBAK)
-                        st.success("Nama Cabang Berhasil Diupdate!")
+                        st.success(f"{cabang_hapus_nama} Dihapus!")
                         st.rerun()
 
-                st.subheader("2. Tambah / Ubah Menu")
-                st.write("Daftar Menu Saat Ini:")
+                st.markdown("---")
+
+                # --- B. KELOLA MENU ---
+                st.subheader("🍔 Kelola Menu & Harga")
                 df_menu = pd.DataFrame(list(MENU_HARGA.items()), columns=['Menu', 'Harga'])
                 st.dataframe(df_menu, use_container_width=True)
 
@@ -213,23 +248,24 @@ def main():
                 with c_tambah1: nama_baru = st.text_input("Nama Menu Baru / Edit")
                 with c_tambah2: harga_baru = st.number_input("Harga (Rp)", min_value=0, step=500)
                 
-                if st.button("➕ Tambah / Update Harga"):
+                if st.button("➕ Simpan Menu"):
                     if nama_baru and harga_baru > 0:
                         MENU_HARGA[nama_baru] = int(harga_baru)
                         save_json(FILE_DB_MENU, MENU_HARGA)
-                        st.success(f"Menu {nama_baru} berhasil disimpan!")
+                        st.success(f"Menu {nama_baru} disimpan!")
                         st.rerun()
                 
-                st.subheader("3. Hapus Menu")
                 menu_hapus = st.selectbox("Pilih menu yg mau dihapus:", list(MENU_HARGA.keys()))
-                if st.button("❌ Hapus Menu Terpilih"):
+                if st.button("❌ Hapus Menu"):
                     if menu_hapus in MENU_HARGA:
                         del MENU_HARGA[menu_hapus]
                         save_json(FILE_DB_MENU, MENU_HARGA)
                         st.success(f"{menu_hapus} Dihapus!")
                         st.rerun()
+
             st.divider()
 
+        # OPERASIONAL
         st.write(f"📍 **Operasional Harian**")
         pilihan_gerobak = st.selectbox("Pilih Lokasi:", list(DATA_GEROBAK.values()))
         
@@ -306,17 +342,13 @@ def main():
                     tunai = st.number_input("Setor Tunai", step=1000)
                     qris = st.number_input("Setor QRIS", step=1000)
                     
-                    # --- FITUR BARU: HITUNGAN LANGSUNG DI LAYAR ---
                     total_fisik = tunai + qris
                     selisih = total_fisik - omzet
                     st.caption(f"💵 Total Uang Fisik (Tunai+QRIS): {format_rupiah(total_fisik)}")
                     
-                    if selisih < 0:
-                        st.error(f"⚠️ MINUS: {format_rupiah(abs(selisih))}")
-                    elif selisih > 0:
-                        st.info(f"ℹ️ LEBIH: {format_rupiah(selisih)}")
-                    else:
-                        st.success("✅ PAS (Balance)")
+                    if selisih < 0: st.error(f"⚠️ MINUS: {format_rupiah(abs(selisih))}")
+                    elif selisih > 0: st.info(f"ℹ️ LEBIH: {format_rupiah(selisih)}")
+                    else: st.success("✅ PAS (Balance)")
                     
                     catatan = st.text_area("Catatan")
 
@@ -331,7 +363,6 @@ def main():
                                f"Status: {status}\n📝 {catatan}")
                         kirim_telegram(msg)
                         
-                        # --- FITUR BARU: PISAH CASH & QRIS DI EXCEL ---
                         list_excel_rows.append({
                             "TANGGAL": tanggal_ini, "JAM_MASUK": data_shift['jam_masuk'], "JAM_PULANG": jam_pulang,
                             "GEROBAK": pilihan_gerobak, "STAFF": nama_aktif,
@@ -355,4 +386,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
