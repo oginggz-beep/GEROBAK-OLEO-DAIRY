@@ -3,17 +3,20 @@ import json
 import os
 import requests
 import pandas as pd
+import pytz # Library untuk Zona Waktu WIB
 from datetime import datetime
+from openpyxl import load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 # ================= KONFIGURASI =================
 TOKEN_BOT  = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4"
 ID_OWNER   = "8505488457"
-PIN_OWNER  = "8888"  # PIN BOS
+PIN_OWNER  = "8888" 
 
-# Nama File Database
-FILE_DB_GEROBAK = "database_gerobak.json" # Data Shift Sementara
-FILE_DB_STAFF   = "database_staff.json"   # Data Akun Staff
-FILE_EXCEL_REP  = "LAPORAN_HARIAN_LENGKAP.xlsx" # File Excel Riwayat
+# Nama File
+FILE_DB_GEROBAK = "database_gerobak.json"
+FILE_DB_STAFF   = "database_staff.json"
+FILE_EXCEL_REP  = "LAPORAN_HARIAN_PRO.xlsx" # Nama file excel baru
 
 # Data Master
 DATA_GEROBAK = {"1": "Gerobak Alun-Alun", "2": "Gerobak Stasiun", "3": "Gerobak Pasar"}
@@ -23,6 +26,11 @@ MENU_HARGA = {
 }
 
 # ================= FUNGSI BANTUAN =================
+def get_waktu_wib():
+    """Mengambil waktu sekarang zona Jakarta (WIB)"""
+    tz = pytz.timezone('Asia/Jakarta')
+    return datetime.now(tz)
+
 def kirim_telegram(pesan):
     try:
         url = f"https://api.telegram.org/bot{TOKEN_BOT}/sendMessage"
@@ -30,12 +38,11 @@ def kirim_telegram(pesan):
     except: pass
 
 def kirim_file_excel_telegram():
-    """Mengirim file Excel ke Telegram Owner"""
     if os.path.exists(FILE_EXCEL_REP):
         try:
             url = f"https://api.telegram.org/bot{TOKEN_BOT}/sendDocument"
             with open(FILE_EXCEL_REP, 'rb') as f:
-                data = {'chat_id': ID_OWNER, 'caption': '📊 Update Laporan Excel'}
+                data = {'chat_id': ID_OWNER, 'caption': '📊 Laporan Excel Profesional'}
                 files = {'document': f}
                 requests.post(url, data=data, files=files)
         except: pass
@@ -69,27 +76,65 @@ def hapus_staff(pin_target):
         return nama
     return None
 
-# ================= FUNGSI EXCEL (BARU DIKEMBALIKAN) =================
-def simpan_ke_excel_database(data_rows):
-    """Menyimpan transaksi ke file Excel (Append Mode)"""
+# ================= FUNGSI EXCEL PROFESIONAL =================
+def rapikan_excel():
+    """Fungsi untuk mempercantik tampilan Excel (Warna, Border, Auto Width)"""
     try:
-        # Cek apakah file sudah ada?
+        wb = load_workbook(FILE_EXCEL_REP)
+        ws = wb.active
+        
+        # 1. Style Header (Biru Tua, Teks Putih)
+        header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), 
+                             top=Side(style='thin'), bottom=Side(style='thin'))
+
+        for cell in ws[1]: # Baris pertama
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # 2. Style Isi Tabel (Border & Alignment)
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.border = thin_border
+                cell.alignment = Alignment(vertical="center", horizontal="center")
+                
+                # Jika kolom Rupiah/Angka (Kolom ke-10 / J), rata kanan
+                if cell.column == 10: 
+                    cell.number_format = '#,##0'
+                    cell.alignment = Alignment(horizontal="right")
+
+        # 3. Auto Width (Lebar Kolom Otomatis)
+        for col in ws.columns:
+            max_length = 0
+            column = col[0].column_letter
+            for cell in col:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except: pass
+            ws.column_dimensions[column].width = (max_length + 2)
+
+        wb.save(FILE_EXCEL_REP)
+    except: pass
+
+def simpan_ke_excel_database(data_rows):
+    try:
         if os.path.exists(FILE_EXCEL_REP):
-            # Load file lama
             df_lama = pd.read_excel(FILE_EXCEL_REP)
-            # Buat dataframe baru dari data saat ini
             df_baru = pd.DataFrame(data_rows)
-            # Gabungkan
             df_final = pd.concat([df_lama, df_baru], ignore_index=True)
         else:
-            # Buat baru jika belum ada
             df_final = pd.DataFrame(data_rows)
             
-        # Simpan Kembali
+        # Simpan Data Mentah
         df_final.to_excel(FILE_EXCEL_REP, index=False)
+        
+        # PANGGIL FUNGSI PERCANTIK
+        rapikan_excel()
         return True
     except Exception as e:
-        st.error(f"Gagal simpan Excel: {e}")
         return False
 
 # ================= APLIKASI WEB UTAMA =================
@@ -97,7 +142,6 @@ def main():
     st.set_page_config(page_title="Sistem Gerobak", page_icon="🥤", layout="centered")
     st.title("🥤 Kasir & Absensi")
 
-    # Session State
     if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
     if 'user_pin' not in st.session_state: st.session_state['user_pin'] = None
 
@@ -148,7 +192,7 @@ def main():
         nama_aktif = st.session_state['user_nama']
         pin_aktif  = st.session_state['user_pin']
         
-        # FITUR OWNER
+        # MENU OWNER
         if nama_aktif == "OWNER":
             st.error("🔧 **MENU SUPER ADMIN**")
             tab_bos1, tab_bos2 = st.tabs(["🛒 Kelola Gerobak", "👥 Kelola Staff"])
@@ -183,7 +227,6 @@ def main():
         st.write(f"📍 **Operasional Harian**")
         pilihan_gerobak = st.selectbox("Pilih Lokasi:", list(DATA_GEROBAK.values()))
         
-        # --- FIX SINKRONISASI: Load DB Terbaru setiap kali render ---
         db_gerobak = load_json(FILE_DB_GEROBAK) 
         data_shift = db_gerobak.get(pilihan_gerobak)
         
@@ -194,7 +237,6 @@ def main():
 
         tab1, tab2 = st.tabs(["☀️ OPENING", "🌙 CLOSING"])
 
-        # --- TAB OPENING ---
         with tab1:
             if data_shift and data_shift['pin_pic'] != pin_aktif:
                 st.error(f"⛔ Gerobak dipakai {data_shift['pic']}.")
@@ -211,9 +253,11 @@ def main():
                         i += 1
                     
                     if st.form_submit_button("SIMPAN OPENING"):
-                        jam_skrg = datetime.now().strftime("%H:%M")
+                        # PAKAI JAM WIB
+                        jam_skrg = get_waktu_wib().strftime("%H:%M")
+                        
                         data_baru = {
-                            "tanggal": datetime.now().strftime("%Y-%m-%d"),
+                            "tanggal": get_waktu_wib().strftime("%Y-%m-%d"),
                             "jam_masuk": data_shift['jam_masuk'] if data_shift else jam_skrg,
                             "pic": nama_aktif, "pin_pic": pin_aktif, "stok": stok_input
                         }
@@ -225,7 +269,6 @@ def main():
                         kirim_telegram(msg)
                         st.success("Tersimpan!"); st.rerun()
 
-        # --- TAB CLOSING (DENGAN EXCEL) ---
         with tab2:
             if not data_shift:
                 st.info("Belum ada data Opening. Silakan Opening dulu.")
@@ -234,25 +277,22 @@ def main():
             else:
                 with st.form("form_closing"):
                     st.write("📊 **Hitung Jualan:**")
-                    # FIX SYNC: Pastikan stok_awal diambil dari data_shift yg baru diload
                     stok_awal = data_shift['stok'] 
-                    
                     omzet = 0
                     txt_jual = []
-                    list_excel_rows = [] # Penampung Data Excel
+                    list_excel_rows = []
                     
-                    jam_pulang = datetime.now().strftime("%H:%M")
-                    tanggal_ini = datetime.now().strftime("%Y-%m-%d")
+                    # PAKAI JAM WIB
+                    jam_pulang = get_waktu_wib().strftime("%H:%M")
+                    tanggal_ini = get_waktu_wib().strftime("%Y-%m-%d")
 
                     for menu, harga in MENU_HARGA.items():
-                        # FIX SYNC: Default 0 jika menu baru
                         awal = stok_awal.get(menu, 0) 
                         sisa = st.number_input(f"Sisa {menu} (Awal: {awal})", min_value=0, max_value=awal)
                         laku = awal - sisa
                         omzet += (laku * harga)
                         txt_jual.append(f"{menu}: {laku}")
                         
-                        # Siapkan Data Excel Per Item
                         list_excel_rows.append({
                             "TANGGAL": tanggal_ini,
                             "JAM_MASUK": data_shift['jam_masuk'],
@@ -276,7 +316,6 @@ def main():
                         selisih = (tunai + qris) - omzet
                         status = "✅ PAS" if selisih == 0 else (f"⚠️ MINUS {selisih}" if selisih < 0 else f"ℹ️ LEBIH {selisih}")
                         
-                        # 1. Kirim Pesan Teks
                         msg = (f"🌙 *CLOSING*\n📍 {pilihan_gerobak}\n👤 {nama_aktif}\n"
                                f"🕒 {data_shift['jam_masuk']} - {jam_pulang}\n\n"
                                f"📊 Jualan: {', '.join(txt_jual)}\n"
@@ -285,7 +324,7 @@ def main():
                                f"Status: {status}\n📝 {catatan}")
                         kirim_telegram(msg)
                         
-                        # 2. Tambahkan Baris Keuangan ke Excel
+                        # Baris Keuangan
                         list_excel_rows.append({
                             "TANGGAL": tanggal_ini, "JAM_MASUK": data_shift['jam_masuk'], "JAM_PULANG": jam_pulang,
                             "GEROBAK": pilihan_gerobak, "STAFF": nama_aktif,
@@ -293,11 +332,9 @@ def main():
                             "OMZET_ITEM": (tunai + qris)
                         })
                         
-                        # 3. Simpan & Kirim Excel
                         simpan_ke_excel_database(list_excel_rows)
                         kirim_file_excel_telegram()
                         
-                        # 4. Hapus Data Shift
                         del db_gerobak[pilihan_gerobak]
                         save_json(FILE_DB_GEROBAK, db_gerobak)
                         
@@ -309,4 +346,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-                        
+                    
