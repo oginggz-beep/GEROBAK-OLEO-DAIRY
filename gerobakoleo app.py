@@ -51,54 +51,67 @@ def main():
     st.set_page_config(page_title="Sistem Gerobak", page_icon="🥤", layout="centered")
     st.title("🥤 Kasir & Absensi")
 
+    # Inisialisasi Session
     if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
     if 'user_pin' not in st.session_state: st.session_state['user_pin'] = None
 
-    # --- SIDEBAR (LOGIN & DAFTAR) ---
+    # --- SIDEBAR (LOGIN / LOGOUT) ---
     with st.sidebar:
         st.header("🔐 Akses Karyawan")
-        mode_akses = st.radio("Menu:", ["Masuk (Login)", "Daftar Baru"])
         
-        if mode_akses == "Masuk (Login)":
-            st.write("Silakan Login:")
-            pin_input = st.text_input("Ketik PIN Anda", max_chars=6, key="login_pin")
+        # LOGIKA: JIKA BELUM LOGIN -> TAMPILKAN FORM LOGIN
+        if st.session_state['user_nama'] is None:
+            mode_akses = st.radio("Menu:", ["Masuk (Login)", "Daftar Baru"])
             
-            if st.button("Masuk"):
-                data_staff = load_json(FILE_DB_STAFF)
+            if mode_akses == "Masuk (Login)":
+                st.write("Silakan Login:")
+                pin_input = st.text_input("Ketik PIN Anda", max_chars=6, key="login_pin")
                 
-                if pin_input == "9999": # PIN OWNER
-                    st.session_state['user_nama'] = "OWNER"
-                    st.session_state['user_pin'] = "9999"
-                    st.success("Halo BOS OWNER!")
-                    st.rerun()
-                elif pin_input in data_staff:
-                    st.session_state['user_nama'] = data_staff[pin_input]
-                    st.session_state['user_pin'] = pin_input
-                    st.success(f"Halo, {data_staff[pin_input]}!")
-                    st.rerun()
-                else:
-                    st.error("PIN Tidak Dikenal.")
+                if st.button("Masuk"):
+                    data_staff = load_json(FILE_DB_STAFF)
+                    
+                    if pin_input == "9999": # PIN OWNER
+                        st.session_state['user_nama'] = "OWNER"
+                        st.session_state['user_pin'] = "9999"
+                        st.success("Halo BOS OWNER!")
+                        st.rerun()
+                    elif pin_input in data_staff:
+                        st.session_state['user_nama'] = data_staff[pin_input]
+                        st.session_state['user_pin'] = pin_input
+                        st.success(f"Halo, {data_staff[pin_input]}!")
+                        st.rerun()
+                    else:
+                        st.error("PIN Tidak Dikenal.")
 
-        elif mode_akses == "Daftar Baru":
-            st.write("Buat Akun Baru:")
-            nama_baru = st.text_input("Nama Panggilan")
-            pin_baru = st.text_input("Buat PIN (Angka)", max_chars=6)
+            elif mode_akses == "Daftar Baru":
+                st.write("Buat Akun Baru:")
+                nama_baru = st.text_input("Nama Panggilan")
+                pin_baru = st.text_input("Buat PIN (Angka)", max_chars=6)
+                
+                if st.button("Simpan Data"):
+                    if nama_baru and pin_baru:
+                        if simpan_staff_baru(nama_baru, pin_baru):
+                            st.success(f"✅ Sukses! {nama_baru} (PIN: {pin_baru})")
+                            kirim_telegram(f"🆕 *STAFF BARU*\nNama: {nama_baru}\nPIN: {pin_baru}")
+                        else: st.error("❌ PIN sudah dipakai.")
+                    else: st.warning("Isi Nama & PIN dulu.")
+
+        # LOGIKA: JIKA SUDAH LOGIN -> TAMPILKAN TOMBOL LOGOUT
+        else:
+            st.success(f"👤 User: **{st.session_state['user_nama']}**")
             
-            if st.button("Simpan Data"):
-                if nama_baru and pin_baru:
-                    if simpan_staff_baru(nama_baru, pin_baru):
-                        st.success(f"✅ Sukses! {nama_baru} (PIN: {pin_baru})")
-                        kirim_telegram(f"🆕 *STAFF BARU*\nNama: {nama_baru}\nPIN: {pin_baru}")
-                    else: st.error("❌ PIN sudah dipakai.")
-                else: st.warning("Isi Nama & PIN dulu.")
+            # TOMBOL LOGOUT
+            if st.button("🚪 LOG OUT (Keluar)"):
+                st.session_state['user_nama'] = None
+                st.session_state['user_pin'] = None
+                st.rerun() # Refresh halaman jadi tampilan awal
 
-    # --- AREA UTAMA ---
+    # --- AREA UTAMA (HANYA MUNCUL JIKA SUDAH LOGIN) ---
     if st.session_state['user_nama']:
         nama_aktif = st.session_state['user_nama']
         pin_aktif  = st.session_state['user_pin']
         
         st.divider()
-        st.write(f"👤 User: **{nama_aktif}**")
         
         # 1. PILIH GEROBAK
         pilihan_gerobak = st.selectbox("📍 Pilih Lokasi:", list(DATA_GEROBAK.values()))
@@ -119,10 +132,9 @@ def main():
             st.error(f"🔧 MENU BOS: {pilihan_gerobak}")
             col_reset, col_dummy = st.columns([1, 1])
             
-            # Tombol Hapus KHUSUS gerobak yang sedang dipilih
             if col_reset.button(f"🗑️ RESET DATA {pilihan_gerobak}"):
                 if pilihan_gerobak in db_gerobak:
-                    del db_gerobak[pilihan_gerobak] # Hapus kunci gerobak ini saja
+                    del db_gerobak[pilihan_gerobak] 
                     save_json(FILE_DB_GEROBAK, db_gerobak)
                     st.success(f"✅ Data {pilihan_gerobak} BERHASIL DIHAPUS!")
                     st.rerun()
@@ -131,7 +143,7 @@ def main():
             st.markdown("---")
         # -----------------------------------------------------------
 
-        # 3. TAB OPERASIONAL (Opening/Closing)
+        # 3. TAB OPERASIONAL
         tab1, tab2 = st.tabs(["☀️ OPENING", "🌙 CLOSING"])
 
         with tab1:
@@ -200,7 +212,9 @@ def main():
                         save_json(FILE_DB_GEROBAK, db_gerobak)
                         st.success("Laporan Terkirim!"); st.balloons(); st.rerun()
     else:
-        st.info("👈 Silakan Login atau Daftar di menu sebelah kiri.")
+        # Jika belum login, tampilkan info di halaman utama
+        st.info("👈 Silakan Login atau Daftar Staff Baru di menu sebelah kiri.")
 
 if __name__ == "__main__":
     main()
+    
