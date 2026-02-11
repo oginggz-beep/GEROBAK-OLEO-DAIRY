@@ -23,8 +23,8 @@ FILE_EXCEL_REP  = "LAPORAN_HARIAN_PRO.xlsx"
 # DATA DEFAULT (Dipakai jika file database belum ada)
 DEFAULT_CABANG = {"1": "Gerobak Alun-Alun", "2": "Gerobak Stasiun", "3": "Gerobak Pasar"}
 DEFAULT_MENU   = {
-    "Strawberry Milk": 10000, "Coklat Milk": 12000,
-    "Kopi Susu Aren": 15000, "Matcha Latte": 15000
+    "Fresh Milk": 10000, "Coklat Milk": 12000,
+    "Strawberry Milk": 10000, "Vanilla Milk": 10000
 }
 
 # ================= FUNGSI LOAD & SAVE DATA =================
