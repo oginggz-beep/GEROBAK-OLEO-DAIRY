@@ -10,11 +10,11 @@ ID_OWNER   = "8505488457"
 FILE_DB    = "database_gerobak.json" # Pengganti file temp
 
 # DATA SETUP
-DATA_STAFF = {"1111": "Budi (Pagi)", "2222": "Siti (Malam)", "9999": "BOSS OWNER"}
+DATA_STAFF = {"1111": "Hasbih", "2222": "Siti ", "9999": "BOSS OWNER"}
 DATA_GEROBAK = {"1": "Gerobak Alun-Alun", "2": "Gerobak Stasiun", "3": "Gerobak Pasar"}
 MENU_HARGA = {
-    "Strawberry Milk": 10000, "Coklat Milk": 12000,
-    "Kopi Susu Aren": 15000, "Matcha Latte": 15000
+    "Strawberry Milk": 10000, "Coklat Milk": 10000,
+    "Kopi Susu Aren": 10000, "Matcha Latte": 10000
 }
 PERLENGKAPAN = ["Mesin Press", "Termos Es", "Lap Tangan", "Gunting", "Tempat Sampah"]
 
