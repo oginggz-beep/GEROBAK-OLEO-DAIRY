@@ -46,7 +46,7 @@ def format_rupiah(angka):
 def load_json(filename):
     if os.path.exists(filename):
         try:
-            with open(filename, 'r') as f: return json.load()
+            with open(filename, 'r') as f: return json.load(f)
         except: return {}
     return {}
 
@@ -245,50 +245,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    with cols[i%2]:
-                            stok_opening[m] = st.number_input(f"{m}", value=int(val_lama), min_value=0)
                     
-                    submit_opening = st.form_submit_button("SIMPAN & KIRIM STOK KE BOS")
-
-                    if submit_opening:
-                        jam_skrg = datetime.now().strftime("%H:%M")
-                        GEROBAK[lokasi] = {
-                            "tanggal": datetime.now().strftime("%d-%m-%Y"),
-                            "jam_masuk": shift['jam_masuk'] if shift else jam_skrg,
-                            "pic": user,
-                            "pin_pic": pin,
-                            "stok": stok_opening
-                        }
-                        save_json(FILE_DB_GEROBAK, GEROBAK)
-                        
-                        # --- LAPORAN STOK KE TELEGRAM ---
-                        txt_stok = []
-                        for item, jml in stok_opening.items():
-                            txt_stok.append(f"• {item}: *{jml}*")
-                        
-                        rincian_stok = "\n".join(txt_stok)
-                        msg_opening = (f"☀️ *LAPORAN STOK AWAL*\n\n"
-                                       f"📍 Lokasi: *{lokasi}*\n"
-                                       f"👤 Staff: *{user}*\n"
-                                       f"🕒 Jam: *{jam_skrg}*\n\n"
-                                       f"📦 *Rincian Stok:*\n{rincian_stok}\n\n"
-                                       f"✅ _Gerobak sudah siap berjualan._")
-                        
-                        kirim_telegram(msg_opening)
-                        st.success("Stok berhasil disimpan dan dilaporkan ke Bos!"); st.rerun()
-
-        # --- TAB CLOSING ---
-        with tb2:
-            if not shift:
-                st.info("Harap isi Stok Awal di tab Buka Shift dulu.")
-            else:
-                st.write("🌙 Halaman tutup shift dan rincian jualan harian.")
-                # (Sama seperti kodingan sebelumnya untuk bagian Closing...)
-                st.write("Gunakan kodingan closing Anda yang sebelumnya di sini.")
-
-    else:
-        st.info("👈 Silakan Login di menu samping.")
-
-if __name__ == "__main__":
-    main()
-    
