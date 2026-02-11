@@ -50,18 +50,20 @@ def simpan_staff_baru(nama, pin):
 
 # ================= APLIKASI WEB UTAMA =================
 def main():
-    st.set_page_config(page_title="Sistem Gerobak", page_icon="🥤", layout="mobile")
+    # --- PERBAIKAN DI SINI (Ganti mobile jadi centered) ---
+    st.set_page_config(page_title="Sistem Gerobak", page_icon="🥤", layout="centered")
+    
     st.title("🥤 Kasir & Absensi")
+
+    # Inisialisasi Session State (Agar Login Tidak Hilang)
+    if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
+    if 'user_pin' not in st.session_state: st.session_state['user_pin'] = None
 
     # --- SIDEBAR: LOGIN & REGISTER ---
     with st.sidebar:
         st.header("🔐 Akses Karyawan")
         mode_akses = st.radio("Menu:", ["Masuk (Login)", "Daftar Baru"])
         
-        # Inisialisasi Session (Biar Login Tidak Hilang saat Klik Tombol)
-        if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
-        if 'user_pin' not in st.session_state: st.session_state['user_pin'] = None
-
         # --- MENU 1: LOGIN ---
         if mode_akses == "Masuk (Login)":
             st.write("Silakan Login:")
@@ -75,10 +77,12 @@ def main():
                     st.session_state['user_nama'] = "OWNER"
                     st.session_state['user_pin'] = "9999"
                     st.success("Halo BOS OWNER!")
+                    st.rerun()
                 elif pin_input in data_staff:
                     st.session_state['user_nama'] = data_staff[pin_input]
                     st.session_state['user_pin'] = pin_input
                     st.success(f"Halo, {data_staff[pin_input]}!")
+                    st.rerun()
                 else:
                     st.error("PIN Tidak Dikenal.")
 
@@ -130,9 +134,13 @@ def main():
                 with st.form("form_opening"):
                     st.write("📦 **Stok Awal:**")
                     stok_input = {}
+                    col1, col2 = st.columns(2) # Bagi 2 kolom biar rapi
+                    i = 0
                     for menu in MENU_HARGA:
                         val = data_shift['stok'].get(menu, 0) if data_shift else 0
-                        stok_input[menu] = st.number_input(f"{menu}", min_value=0, value=val)
+                        with (col1 if i % 2 == 0 else col2):
+                            stok_input[menu] = st.number_input(f"{menu}", min_value=0, value=val)
+                        i += 1
                     
                     if st.form_submit_button("SIMPAN OPENING"):
                         jam_skrg = datetime.now().strftime("%H:%M")
@@ -198,4 +206,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-            
