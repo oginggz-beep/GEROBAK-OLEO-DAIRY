@@ -3,10 +3,14 @@ import json
 import os
 import requests
 from datetime import datetime
+import pandas as pd
 
 # ================= KONFIGURASI =================
 TOKEN_BOT  = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4"
 ID_OWNER   = "8505488457"
+
+# 🔥 GANTI PASSWORD OWNER DI SINI:
+PIN_OWNER  = "8888" 
 
 # File Database
 FILE_DB_GEROBAK = "database_gerobak.json"
@@ -46,6 +50,15 @@ def simpan_staff_baru(nama, pin):
     save_json(FILE_DB_STAFF, data)
     return True
 
+def hapus_staff(pin_target):
+    data = load_json(FILE_DB_STAFF)
+    if pin_target in data:
+        nama = data[pin_target]
+        del data[pin_target]
+        save_json(FILE_DB_STAFF, data)
+        return nama
+    return None
+
 # ================= APLIKASI WEB =================
 def main():
     st.set_page_config(page_title="Sistem Gerobak", page_icon="🥤", layout="centered")
@@ -59,7 +72,7 @@ def main():
     with st.sidebar:
         st.header("🔐 Akses Karyawan")
         
-        # LOGIKA: JIKA BELUM LOGIN -> TAMPILKAN FORM LOGIN
+        # JIKA BELUM LOGIN
         if st.session_state['user_nama'] is None:
             mode_akses = st.radio("Menu:", ["Masuk (Login)", "Daftar Baru"])
             
@@ -70,9 +83,9 @@ def main():
                 if st.button("Masuk"):
                     data_staff = load_json(FILE_DB_STAFF)
                     
-                    if pin_input == "9999": # PIN OWNER
+                    if pin_input == PIN_OWNER: # PIN OWNER DIAMBIL DARI KONFIGURASI DI ATAS
                         st.session_state['user_nama'] = "OWNER"
-                        st.session_state['user_pin'] = "9999"
+                        st.session_state['user_pin'] = PIN_OWNER
                         st.success("Halo BOS OWNER!")
                         st.rerun()
                     elif pin_input in data_staff:
@@ -96,54 +109,96 @@ def main():
                         else: st.error("❌ PIN sudah dipakai.")
                     else: st.warning("Isi Nama & PIN dulu.")
 
-        # LOGIKA: JIKA SUDAH LOGIN -> TAMPILKAN TOMBOL LOGOUT
+        # JIKA SUDAH LOGIN
         else:
             st.success(f"👤 User: **{st.session_state['user_nama']}**")
-            
-            # TOMBOL LOGOUT
             if st.button("🚪 LOG OUT (Keluar)"):
                 st.session_state['user_nama'] = None
                 st.session_state['user_pin'] = None
-                st.rerun() # Refresh halaman jadi tampilan awal
+                st.rerun()
 
-    # --- AREA UTAMA (HANYA MUNCUL JIKA SUDAH LOGIN) ---
+    # --- AREA UTAMA ---
     if st.session_state['user_nama']:
         nama_aktif = st.session_state['user_nama']
         pin_aktif  = st.session_state['user_pin']
         
+        # -----------------------------------------------------------
+        # 🔥 KHUSUS OWNER: MENU SUPER ADMIN 🔥
+        # -----------------------------------------------------------
+        if nama_aktif == "OWNER":
+            st.error("🔧 **MENU SUPER ADMIN (OWNER)**")
+            
+            # Buat Tab Khusus Bos
+            tab_bos1, tab_bos2 = st.tabs(["🛒 Kelola Gerobak", "👥 Kelola Staff"])
+            
+            # TAB 1: RESET GEROBAK
+            with tab_bos1:
+                st.write("Pilih Gerobak yang mau di-RESET (Hapus Data Shift):")
+                db_gerobak_bos = load_json(FILE_DB_GEROBAK)
+                
+                # Tampilkan status semua gerobak
+                for g_id, g_nama in DATA_GEROBAK.items():
+                    info_g = db_gerobak_bos.get(g_nama)
+                    status_text = f"✅ KOSONG"
+                    if info_g:
+                        status_text = f"⚠️ AKTIF (Oleh: {info_g['pic']})"
+                    
+                    col_a, col_b = st.columns([3, 1])
+                    col_a.text(f"{g_nama} -> {status_text}")
+                    
+                    if info_g:
+                        if col_b.button(f"🗑️ HAPUS", key=f"del_{g_id}"):
+                            del db_gerobak_bos[g_nama]
+                            save_json(FILE_DB_GEROBAK, db_gerobak_bos)
+                            st.success(f"Data {g_nama} berhasil dihapus!")
+                            st.rerun()
+
+            # TAB 2: KELOLA STAFF (HAPUS STAFF)
+            with tab_bos2:
+                st.write("Daftar Semua Staff Terdaftar:")
+                data_staff_bos = load_json(FILE_DB_STAFF)
+                
+                if data_staff_bos:
+                    # Tampilkan Tabel
+                    df_staff = pd.DataFrame(list(data_staff_bos.items()), columns=['PIN', 'NAMA'])
+                    st.dataframe(df_staff, use_container_width=True)
+                    
+                    st.write("---")
+                    st.write("❌ **Hapus Akun Staff**")
+                    
+                    # Pilihan Hapus (Format: "NAMA - PIN")
+                    list_pilihan = [f"{v} - {k}" for k,v in data_staff_bos.items()]
+                    pilih_hapus = st.selectbox("Pilih Staff:", list_pilihan)
+                    
+                    if st.button("Hapus Staff Terpilih"):
+                        # Ambil PIN dari string pilihan
+                        pin_target = pilih_hapus.split(" - ")[-1]
+                        nama_terhapus = hapus_staff(pin_target)
+                        if nama_terhapus:
+                            st.success(f"✅ Staff {nama_terhapus} (PIN: {pin_target}) Telah Dihapus!")
+                            st.rerun()
+                else:
+                    st.info("Belum ada staff yang terdaftar.")
+            
+            st.markdown("---")
+        # -----------------------------------------------------------
+
+        # MENU OPERASIONAL BIASA
         st.divider()
+        st.write(f"📍 **Operasional Harian** (Login: {nama_aktif})")
         
         # 1. PILIH GEROBAK
-        pilihan_gerobak = st.selectbox("📍 Pilih Lokasi:", list(DATA_GEROBAK.values()))
+        pilihan_gerobak = st.selectbox("Pilih Lokasi:", list(DATA_GEROBAK.values()))
         db_gerobak = load_json(FILE_DB_GEROBAK)
         data_shift = db_gerobak.get(pilihan_gerobak)
         
-        # 2. STATUS INFO
+        # 2. STATUS
         if data_shift:
             st.info(f"⚠️ SHIFT AKTIF: {data_shift['pic']} (Sejak {data_shift['jam_masuk']})")
         else:
             st.success("✅ GEROBAK KOSONG (Siap Buka)")
 
-        # -----------------------------------------------------------
-        # 🔥 FITUR SPESIAL OWNER: RESET PER GEROBAK 🔥
-        # -----------------------------------------------------------
-        if nama_aktif == "OWNER":
-            st.markdown("---")
-            st.error(f"🔧 MENU BOS: {pilihan_gerobak}")
-            col_reset, col_dummy = st.columns([1, 1])
-            
-            if col_reset.button(f"🗑️ RESET DATA {pilihan_gerobak}"):
-                if pilihan_gerobak in db_gerobak:
-                    del db_gerobak[pilihan_gerobak] 
-                    save_json(FILE_DB_GEROBAK, db_gerobak)
-                    st.success(f"✅ Data {pilihan_gerobak} BERHASIL DIHAPUS!")
-                    st.rerun()
-                else:
-                    st.warning("Gerobak ini memang sudah kosong.")
-            st.markdown("---")
-        # -----------------------------------------------------------
-
-        # 3. TAB OPERASIONAL
+        # 3. TAB KERJA
         tab1, tab2 = st.tabs(["☀️ OPENING", "🌙 CLOSING"])
 
         with tab1:
@@ -212,9 +267,7 @@ def main():
                         save_json(FILE_DB_GEROBAK, db_gerobak)
                         st.success("Laporan Terkirim!"); st.balloons(); st.rerun()
     else:
-        # Jika belum login, tampilkan info di halaman utama
-        st.info("👈 Silakan Login atau Daftar Staff Baru di menu sebelah kiri.")
+        st.info("👈 Silakan Login atau Daftar di menu sebelah kiri.")
 
 if __name__ == "__main__":
     main()
-    
