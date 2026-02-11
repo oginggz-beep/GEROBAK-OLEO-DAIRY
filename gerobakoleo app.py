@@ -16,18 +16,18 @@ PIN_OWNER  = "8888"
 # Nama File Database
 FILE_DB_GEROBAK = "database_gerobak.json"
 FILE_DB_STAFF   = "database_staff.json"
-FILE_DB_MENU    = "database_menu.json"   # BARU: Simpan Menu & Harga
-FILE_DB_CABANG  = "database_cabang.json" # BARU: Simpan Nama Cabang
+FILE_DB_MENU    = "database_menu.json"
+FILE_DB_CABANG  = "database_cabang.json"
 FILE_EXCEL_REP  = "LAPORAN_HARIAN_PRO.xlsx"
 
-# DATA DEFAULT (Dipakai jika file database belum ada)
+# DATA DEFAULT
 DEFAULT_CABANG = {"1": "Gerobak Alun-Alun", "2": "Gerobak Stasiun", "3": "Gerobak Pasar"}
 DEFAULT_MENU   = {
-    "Fresh Milk": 10000, "Coklat Milk": 12000,
-    "Strawberry Milk": 10000, "Vanilla Milk": 10000
+    "Strawberry Milk": 10000, "Coklat Milk": 12000,
+    "Kopi Susu Aren": 15000, "Matcha Latte": 15000
 }
 
-# ================= FUNGSI LOAD & SAVE DATA =================
+# ================= FUNGSI BANTUAN =================
 def load_json(filename, default_data=None):
     if os.path.exists(filename):
         try:
@@ -38,7 +38,6 @@ def load_json(filename, default_data=None):
 def save_json(filename, data):
     with open(filename, 'w') as f: json.dump(data, f)
 
-# ================= FUNGSI BANTUAN LAINNYA =================
 def get_waktu_wib():
     tz = pytz.timezone('Asia/Jakarta')
     return datetime.now(tz)
@@ -118,20 +117,16 @@ def main():
     st.set_page_config(page_title="Sistem Gerobak", page_icon="🥤", layout="centered")
     st.title("🥤 Kasir & Absensi")
 
-    # LOAD DATA DINAMIS (Menu & Cabang diambil dari File, bukan Kodingan)
     DATA_GEROBAK = load_json(FILE_DB_CABANG, DEFAULT_CABANG)
     MENU_HARGA   = load_json(FILE_DB_MENU, DEFAULT_MENU)
 
     if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
     if 'user_pin' not in st.session_state: st.session_state['user_pin'] = None
 
-    # --- SIDEBAR ---
     with st.sidebar:
         st.header("🔐 Akses Karyawan")
-        
         if st.session_state['user_nama'] is None:
             mode_akses = st.radio("Menu:", ["Masuk (Login)", "Daftar Baru"])
-            
             if mode_akses == "Masuk (Login)":
                 st.write("Silakan Login:")
                 pin_input = st.text_input("Ketik PIN Anda", max_chars=6, key="login_pin")
@@ -148,7 +143,6 @@ def main():
                         st.success(f"Halo, {data_staff[pin_input]}!")
                         st.rerun()
                     else: st.error("PIN Tidak Dikenal.")
-
             elif mode_akses == "Daftar Baru":
                 st.write("Buat Akun Baru:")
                 nama_baru = st.text_input("Nama Panggilan")
@@ -168,19 +162,14 @@ def main():
                 st.session_state['user_pin'] = None
                 st.rerun()
 
-    # --- AREA UTAMA ---
     if st.session_state['user_nama']:
         nama_aktif = st.session_state['user_nama']
         pin_aktif  = st.session_state['user_pin']
         
-        # ==========================================================
-        # 🔧 FITUR OWNER: MENU SUPER ADMIN (PENGATURAN)
-        # ==========================================================
         if nama_aktif == "OWNER":
             st.error("🔧 **MENU SUPER ADMIN**")
-            tab1, tab2, tab3 = st.tabs(["🛒 Reset Shift", "👥 Kelola Staff", "⚙️ Atur Menu & Harga"])
+            tab1, tab2, tab3 = st.tabs(["🛒 Reset Shift", "👥 Kelola Staff", "⚙️ Atur Menu"])
             
-            # TAB 1: RESET SHIFT
             with tab1:
                 st.write("Reset Data Shift:")
                 db_gerobak_bos = load_json(FILE_DB_GEROBAK)
@@ -193,8 +182,6 @@ def main():
                         del db_gerobak_bos[g_nama]
                         save_json(FILE_DB_GEROBAK, db_gerobak_bos)
                         st.rerun()
-            
-            # TAB 2: HAPUS STAFF
             with tab2:
                 data_staff_bos = load_json(FILE_DB_STAFF)
                 if data_staff_bos:
@@ -203,8 +190,6 @@ def main():
                     pilih_hapus = st.selectbox("Pilih Staff:", list_pilihan)
                     if st.button("Hapus Staff Terpilih"):
                         if hapus_staff(pilih_hapus.split(" - ")[-1]): st.rerun()
-            
-            # TAB 3: PENGATURAN MENU & CABANG (BARU!)
             with tab3:
                 st.subheader("1. Ubah Nama Cabang")
                 with st.form("form_ganti_cabang"):
@@ -220,16 +205,13 @@ def main():
                         st.rerun()
 
                 st.subheader("2. Tambah / Ubah Menu")
-                # Tampilkan Menu Saat Ini
                 st.write("Daftar Menu Saat Ini:")
                 df_menu = pd.DataFrame(list(MENU_HARGA.items()), columns=['Menu', 'Harga'])
                 st.dataframe(df_menu, use_container_width=True)
 
                 c_tambah1, c_tambah2 = st.columns(2)
-                with c_tambah1:
-                    nama_baru = st.text_input("Nama Menu Baru / Edit")
-                with c_tambah2:
-                    harga_baru = st.number_input("Harga (Rp)", min_value=0, step=500)
+                with c_tambah1: nama_baru = st.text_input("Nama Menu Baru / Edit")
+                with c_tambah2: harga_baru = st.number_input("Harga (Rp)", min_value=0, step=500)
                 
                 if st.button("➕ Tambah / Update Harga"):
                     if nama_baru and harga_baru > 0:
@@ -237,8 +219,7 @@ def main():
                         save_json(FILE_DB_MENU, MENU_HARGA)
                         st.success(f"Menu {nama_baru} berhasil disimpan!")
                         st.rerun()
-                    else: st.warning("Isi Nama & Harga dengan benar.")
-
+                
                 st.subheader("3. Hapus Menu")
                 menu_hapus = st.selectbox("Pilih menu yg mau dihapus:", list(MENU_HARGA.keys()))
                 if st.button("❌ Hapus Menu Terpilih"):
@@ -247,12 +228,8 @@ def main():
                         save_json(FILE_DB_MENU, MENU_HARGA)
                         st.success(f"{menu_hapus} Dihapus!")
                         st.rerun()
-
             st.divider()
 
-        # ==========================================================
-        # 📍 OPERASIONAL HARIAN (STAFF)
-        # ==========================================================
         st.write(f"📍 **Operasional Harian**")
         pilihan_gerobak = st.selectbox("Pilih Lokasi:", list(DATA_GEROBAK.values()))
         
@@ -275,7 +252,7 @@ def main():
                     stok_input = {}
                     col1, col2 = st.columns(2)
                     i = 0
-                    for menu in MENU_HARGA: # Loop Menu Dari Database
+                    for menu in MENU_HARGA:
                         val = data_shift['stok'].get(menu, 0) if data_shift else 0
                         with (col1 if i % 2 == 0 else col2):
                             stok_input[menu] = st.number_input(f"{menu}", min_value=0, value=val)
@@ -308,11 +285,10 @@ def main():
                     omzet = 0
                     txt_jual = []
                     list_excel_rows = []
-                    
                     jam_pulang = get_waktu_wib().strftime("%H:%M")
                     tanggal_ini = get_waktu_wib().strftime("%Y-%m-%d")
 
-                    for menu, harga in MENU_HARGA.items(): # Loop Menu Dari Database
+                    for menu, harga in MENU_HARGA.items():
                         awal = stok_awal.get(menu, 0) 
                         sisa = st.number_input(f"Sisa {menu} (Awal: {awal})", min_value=0, max_value=awal)
                         laku = awal - sisa
@@ -329,10 +305,22 @@ def main():
                     st.info(f"Target Sistem: **{format_rupiah(omzet)}**")
                     tunai = st.number_input("Setor Tunai", step=1000)
                     qris = st.number_input("Setor QRIS", step=1000)
+                    
+                    # --- FITUR BARU: HITUNGAN LANGSUNG DI LAYAR ---
+                    total_fisik = tunai + qris
+                    selisih = total_fisik - omzet
+                    st.caption(f"💵 Total Uang Fisik (Tunai+QRIS): {format_rupiah(total_fisik)}")
+                    
+                    if selisih < 0:
+                        st.error(f"⚠️ MINUS: {format_rupiah(abs(selisih))}")
+                    elif selisih > 0:
+                        st.info(f"ℹ️ LEBIH: {format_rupiah(selisih)}")
+                    else:
+                        st.success("✅ PAS (Balance)")
+                    
                     catatan = st.text_area("Catatan")
 
                     if st.form_submit_button("KIRIM LAPORAN"):
-                        selisih = (tunai + qris) - omzet
                         status = "✅ PAS" if selisih == 0 else (f"⚠️ MINUS {selisih}" if selisih < 0 else f"ℹ️ LEBIH {selisih}")
                         
                         msg = (f"🌙 *CLOSING*\n📍 {pilihan_gerobak}\n👤 {nama_aktif}\n"
@@ -343,12 +331,20 @@ def main():
                                f"Status: {status}\n📝 {catatan}")
                         kirim_telegram(msg)
                         
+                        # --- FITUR BARU: PISAH CASH & QRIS DI EXCEL ---
                         list_excel_rows.append({
                             "TANGGAL": tanggal_ini, "JAM_MASUK": data_shift['jam_masuk'], "JAM_PULANG": jam_pulang,
                             "GEROBAK": pilihan_gerobak, "STAFF": nama_aktif,
-                            "ITEM": "TOTAL SETORAN", "AWAL": 0, "SISA": 0, "TERJUAL": 0, 
-                            "OMZET_ITEM": (tunai + qris)
+                            "ITEM": "SETOR TUNAI", "AWAL": 0, "SISA": 0, "TERJUAL": 0, 
+                            "OMZET_ITEM": tunai
                         })
+                        list_excel_rows.append({
+                            "TANGGAL": tanggal_ini, "JAM_MASUK": data_shift['jam_masuk'], "JAM_PULANG": jam_pulang,
+                            "GEROBAK": pilihan_gerobak, "STAFF": nama_aktif,
+                            "ITEM": "SETOR QRIS", "AWAL": 0, "SISA": 0, "TERJUAL": 0, 
+                            "OMZET_ITEM": qris
+                        })
+                        
                         simpan_ke_excel_database(list_excel_rows)
                         kirim_file_excel_telegram()
                         del db_gerobak[pilihan_gerobak]
@@ -359,4 +355,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+    
