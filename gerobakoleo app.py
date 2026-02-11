@@ -8,7 +8,7 @@ from datetime import datetime
 TOKEN_BOT  = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4"
 ID_OWNER   = "8505488457"
 
-# File Penyimpanan
+# File Database
 FILE_DB_GEROBAK = "database_gerobak.json"
 FILE_DB_STAFF   = "database_staff.json"
 
@@ -54,7 +54,7 @@ def main():
     if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
     if 'user_pin' not in st.session_state: st.session_state['user_pin'] = None
 
-    # --- SIDEBAR ---
+    # --- SIDEBAR (LOGIN & DAFTAR) ---
     with st.sidebar:
         st.header("🔐 Akses Karyawan")
         mode_akses = st.radio("Menu:", ["Masuk (Login)", "Daftar Baru"])
@@ -92,15 +92,6 @@ def main():
                     else: st.error("❌ PIN sudah dipakai.")
                 else: st.warning("Isi Nama & PIN dulu.")
 
-        # --- FITUR KHUSUS OWNER: RESET DATA ---
-        if st.session_state['user_nama'] == "OWNER":
-            st.markdown("---")
-            st.write("🔧 **Menu Bos**")
-            if st.button("🔴 RESET SEMUA GEROBAK"):
-                save_json(FILE_DB_GEROBAK, {}) # Kosongkan Database
-                st.success("✅ Semua data shift dihapus!")
-                st.rerun()
-
     # --- AREA UTAMA ---
     if st.session_state['user_nama']:
         nama_aktif = st.session_state['user_nama']
@@ -109,15 +100,38 @@ def main():
         st.divider()
         st.write(f"👤 User: **{nama_aktif}**")
         
+        # 1. PILIH GEROBAK
         pilihan_gerobak = st.selectbox("📍 Pilih Lokasi:", list(DATA_GEROBAK.values()))
         db_gerobak = load_json(FILE_DB_GEROBAK)
         data_shift = db_gerobak.get(pilihan_gerobak)
         
+        # 2. STATUS INFO
         if data_shift:
             st.info(f"⚠️ SHIFT AKTIF: {data_shift['pic']} (Sejak {data_shift['jam_masuk']})")
         else:
             st.success("✅ GEROBAK KOSONG (Siap Buka)")
 
+        # -----------------------------------------------------------
+        # 🔥 FITUR SPESIAL OWNER: RESET PER GEROBAK 🔥
+        # -----------------------------------------------------------
+        if nama_aktif == "OWNER":
+            st.markdown("---")
+            st.error(f"🔧 MENU BOS: {pilihan_gerobak}")
+            col_reset, col_dummy = st.columns([1, 1])
+            
+            # Tombol Hapus KHUSUS gerobak yang sedang dipilih
+            if col_reset.button(f"🗑️ RESET DATA {pilihan_gerobak}"):
+                if pilihan_gerobak in db_gerobak:
+                    del db_gerobak[pilihan_gerobak] # Hapus kunci gerobak ini saja
+                    save_json(FILE_DB_GEROBAK, db_gerobak)
+                    st.success(f"✅ Data {pilihan_gerobak} BERHASIL DIHAPUS!")
+                    st.rerun()
+                else:
+                    st.warning("Gerobak ini memang sudah kosong.")
+            st.markdown("---")
+        # -----------------------------------------------------------
+
+        # 3. TAB OPERASIONAL (Opening/Closing)
         tab1, tab2 = st.tabs(["☀️ OPENING", "🌙 CLOSING"])
 
         with tab1:
@@ -190,4 +204,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
