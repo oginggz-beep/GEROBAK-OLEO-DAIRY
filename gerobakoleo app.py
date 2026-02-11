@@ -8,7 +8,7 @@ from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 import openpyxl
 
 # ================= KONFIGURASI (ISI TOKEN DISINI) =================
-TOKEN_BOT = "PASTE_TOKEN_BOT_ANDA_DISINI"  # 👈 GANTI INI DENGAN TOKEN ANDA
+TOKEN_BOT = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4"  # 👈 GANTI INI DENGAN TOKEN ANDA
 ID_OWNER  = "8505488457"
 PIN_OWNER = "8888"
 
