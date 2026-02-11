@@ -9,7 +9,7 @@ import openpyxl
 
 # ================= KONFIGURASI UTAMA (EDIT DISINI) =================
 # 👇 Masukkan Token Bot Telegram Anda di dalam tanda kutip:
-TOKEN_BOT = "PASTE_TOKEN_BOT_ANDA_DISINI" 
+TOKEN_BOT = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4" 
 
 # 👇 ID Telegram & PIN Owner
 ID_OWNER  = "8505488457"  
