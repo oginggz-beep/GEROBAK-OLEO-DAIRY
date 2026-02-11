@@ -4,19 +4,18 @@ import os
 import requests
 import pandas as pd
 from datetime import datetime
+from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+import openpyxl
 
-# ================= KONFIGURASI KEAMANAN =================
-# Mengambil data rahasia dari file .streamlit/secrets.toml
-try:
-    TOKEN_BOT = st.secrets["telegram"]["token"]
-    ID_OWNER  = st.secrets["telegram"]["owner_id"]
-    PIN_OWNER = st.secrets["telegram"]["pin_owner"]
-except Exception as e:
-    st.error("⚠️ File .streamlit/secrets.toml belum dibuat atau format salah!")
-    st.info("Buat folder .streamlit dan file secrets.toml berisi [telegram] token=... terlebih dahulu.")
-    st.stop()
+# ================= KONFIGURASI UTAMA (EDIT DISINI) =================
+# 👇 Masukkan Token Bot Telegram Anda di dalam tanda kutip dibawah ini:
+TOKEN_BOT = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4" 
 
-# Nama File Database
+# 👇 ID Telegram & PIN Owner (Bisa diganti)
+ID_OWNER  = "8505488457"  
+PIN_OWNER = "8888"        
+
+# ================= DATABASE & FILE =================
 FILE_DB_GEROBAK = "database_gerobak.json"
 FILE_DB_STAFF   = "database_staff.json"
 FILE_DB_MENU    = "database_menu.json"
@@ -24,35 +23,32 @@ FILE_EXCEL_REP  = "LAPORAN_HARIAN_LENGKAP.xlsx"
 
 # Data Master Default
 MENU_DEFAULT = {
-    "Strawberry Milk": 10000, 
-    "Coklat Milk": 12000,
-    "Kopi Susu Aren": 15000, 
-    "Matcha Latte": 15000
+    "Strawberry Milk": 10000, "Coklat Milk": 12000,
+    "Kopi Susu Aren": 15000, "Matcha Latte": 15000
 }
 DATA_GEROBAK = {"1": "Gerobak Alun-Alun", "2": "Gerobak Stasiun", "3": "Gerobak Pasar"}
 
 # ================= FUNGSI BANTUAN =================
 def kirim_telegram(pesan):
-    """Mengirim pesan teks ke Telegram Owner"""
+    """Kirim pesan teks ke Telegram Owner"""
+    if TOKEN_BOT == "PASTE_TOKEN_BOT_ANDA_DISINI": return # Cegah error jika token belum diisi
     try:
         url = f"https://api.telegram.org/bot{TOKEN_BOT}/sendMessage"
         requests.post(url, data={"chat_id": ID_OWNER, "text": pesan})
-    except Exception as e: 
-        print(f"Error Telegram: {e}")
+    except: pass
 
 def kirim_file_excel_telegram():
-    """Mengirim file Excel ke Telegram Owner"""
+    """Kirim file Excel ke Telegram"""
+    if TOKEN_BOT == "PASTE_TOKEN_BOT_ANDA_DISINI": return
     if os.path.exists(FILE_EXCEL_REP):
         try:
             url = f"https://api.telegram.org/bot{TOKEN_BOT}/sendDocument"
             with open(FILE_EXCEL_REP, 'rb') as f:
-                data = {'chat_id': ID_OWNER, 'caption': '📊 Update Laporan Excel'}
-                files = {'document': f}
-                requests.post(url, data=data, files=files)
+                requests.post(url, data={'chat_id': ID_OWNER, 'caption': '📊 Update Laporan Excel'}, files={'document': f})
         except: pass
 
 def format_rupiah(angka):
-    return f"Rp {angka:,}".replace(",", ".")
+    return f"Rp {int(angka):,}".replace(",", ".")
 
 def load_json(filename):
     if os.path.exists(filename):
@@ -64,7 +60,7 @@ def load_json(filename):
 def save_json(filename, data):
     with open(filename, 'w') as f: json.dump(data, f, indent=4)
 
-# --- FUNGSI MENU ---
+# --- FUNGSI MENU DINAMIS ---
 def get_menu_aktif():
     data = load_json(FILE_DB_MENU)
     if not data:
@@ -72,15 +68,15 @@ def get_menu_aktif():
         return MENU_DEFAULT
     return data
 
-def simpan_menu_baru(nama_item, harga_item):
+def simpan_menu_baru(nama, harga):
     data = get_menu_aktif()
-    data[nama_item] = int(harga_item)
+    data[nama] = int(harga)
     save_json(FILE_DB_MENU, data)
 
-def hapus_menu(nama_item):
+def hapus_menu(nama):
     data = get_menu_aktif()
-    if nama_item in data:
-        del data[nama_item]
+    if nama in data:
+        del data[nama]
         save_json(FILE_DB_MENU, data)
 
 # --- FUNGSI STAFF ---
@@ -91,16 +87,53 @@ def simpan_staff_baru(nama, pin):
     save_json(FILE_DB_STAFF, data)
     return True
 
-def hapus_staff(pin_target):
+def hapus_staff(pin):
     data = load_json(FILE_DB_STAFF)
-    if pin_target in data:
-        nama = data[pin_target]
-        del data[pin_target]
+    if pin in data:
+        nama = data[pin]
+        del data[pin]
         save_json(FILE_DB_STAFF, data)
         return nama
     return None
 
-# ================= FUNGSI EXCEL =================
+# ================= FUNGSI EXCEL PRO (RAPI & CANTIK) =================
+def rapikan_excel(filename):
+    try:
+        wb = openpyxl.load_workbook(filename)
+        ws = wb.active
+
+        # Style Header (Biru Tua, Tebal, Putih)
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="203764", end_color="203764", fill_type="solid")
+        center = Alignment(horizontal="center", vertical="center")
+        thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+        
+        # Terapkan ke Header
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center
+            cell.border = thin_border
+
+        # Auto Width & Format Isi
+        for col in ws.columns:
+            max_len = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                cell.border = thin_border
+                try:
+                    if len(str(cell.value)) > max_len: max_len = len(str(cell.value))
+                except: pass
+                
+                # Format Rupiah Otomatis
+                header_text = ws[f"{col_letter}1"].value
+                if header_text and any(x in str(header_text).upper() for x in ['OMZET', 'HARGA', 'TUNAI', 'QRIS', 'TOTAL']):
+                    cell.number_format = '#,##0 "Rp"'
+
+            ws.column_dimensions[col_letter].width = (max_len + 3)
+        wb.save(filename)
+    except: pass
+
 def simpan_ke_excel_database(data_rows):
     try:
         df_baru = pd.DataFrame(data_rows)
@@ -109,238 +142,178 @@ def simpan_ke_excel_database(data_rows):
             df_final = pd.concat([df_lama, df_baru], ignore_index=True)
         else:
             df_final = df_baru
+        
+        # Simpan & Rapikan
         df_final.to_excel(FILE_EXCEL_REP, index=False)
+        rapikan_excel(FILE_EXCEL_REP)
         return True
     except Exception as e:
-        st.error(f"❌ Gagal simpan Excel: {e}")
+        st.error(f"❌ Gagal Excel: {e}")
         return False
 
-# ================= APLIKASI WEB UTAMA =================
+# ================= TAMPILAN APLIKASI =================
 def main():
-    st.set_page_config(page_title="Sistem Gerobak Aman", page_icon="🔒", layout="centered")
+    st.set_page_config(page_title="Sistem Kasir Pro", page_icon="🛍️", layout="centered")
     
+    # Cek Token Dulu
+    if TOKEN_BOT == "PASTE_TOKEN_BOT_ANDA_DISINI":
+        st.error("⚠️ TOKEN BELUM DIISI!")
+        st.warning("Buka file app.py, lalu ganti tulisan 'PASTE_TOKEN_BOT_ANDA_DISINI' dengan Token Telegram Anda.")
+        st.stop()
+
     MENU_SEKARANG = get_menu_aktif()
-    st.title("🥤 Kasir & Absensi (Secure)")
-    st.caption(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
+    st.title("🛍️ Kasir & Absensi Gerobak")
+    st.caption(f"📅 Tanggal: {datetime.now().strftime('%d-%m-%Y')}")
 
     if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
     if 'user_pin' not in st.session_state: st.session_state['user_pin'] = None
 
-    # --- SIDEBAR ---
+    # --- SIDEBAR LOGIN ---
     with st.sidebar:
-        st.header("🔐 Akses Karyawan")
-        
+        st.header("🔐 Login Akses")
         if st.session_state['user_nama'] is None:
-            mode_akses = st.radio("Menu:", ["Masuk (Login)", "Daftar Baru"])
+            mode = st.radio("Pilih Menu:", ["Login Masuk", "Daftar Staff Baru"])
             
-            if mode_akses == "Masuk (Login)":
-                st.write("Silakan Login:")
-                pin_input = st.text_input("Ketik PIN Anda", max_chars=6, type="password", key="login_pin")
-                if st.button("Masuk"):
+            if mode == "Login Masuk":
+                pin = st.text_input("Masukkan PIN", type="password", max_chars=6)
+                if st.button("🚀 MASUK"):
                     data_staff = load_json(FILE_DB_STAFF)
-                    # Cek Owner pakai data dari secrets
-                    if pin_input == PIN_OWNER:
+                    if pin == PIN_OWNER:
                         st.session_state['user_nama'] = "OWNER"
                         st.session_state['user_pin'] = PIN_OWNER
-                        st.toast("Selamat datang, Bos!", icon="😎")
                         st.rerun()
-                    elif pin_input in data_staff:
-                        st.session_state['user_nama'] = data_staff[pin_input]
-                        st.session_state['user_pin'] = pin_input
-                        st.toast(f"Selamat bekerja, {data_staff[pin_input]}!", icon="💪")
+                    elif pin in data_staff:
+                        st.session_state['user_nama'] = data_staff[pin]
+                        st.session_state['user_pin'] = pin
                         st.rerun()
-                    else: st.error("PIN Tidak Dikenal.")
+                    else: st.error("PIN Salah!")
 
-            elif mode_akses == "Daftar Baru":
-                st.write("Buat Akun Baru:")
-                nama_baru = st.text_input("Nama Panggilan")
+            elif mode == "Daftar Staff Baru":
+                nama = st.text_input("Nama Panggilan")
                 pin_baru = st.text_input("Buat PIN (Angka)", max_chars=6)
-                if st.button("Simpan Data"):
-                    if nama_baru and pin_baru:
-                        if simpan_staff_baru(nama_baru, pin_baru):
-                            st.success(f"✅ Sukses! {nama_baru}")
-                            kirim_telegram(f"🆕 *STAFF BARU*\nNama: {nama_baru}\nPIN: {pin_baru}")
-                        else: st.error("❌ PIN sudah dipakai.")
-                    else: st.warning("Isi Nama & PIN dulu.")
+                if st.button("💾 Simpan Staff"):
+                    if nama and pin_baru:
+                        if simpan_staff_baru(nama, pin_baru):
+                            st.success(f"Staff {nama} Terdaftar!")
+                            kirim_telegram(f"🆕 STAFF BARU: {nama} (PIN: {pin_baru})")
+                        else: st.error("PIN sudah dipakai!")
         else:
-            st.success(f"👤 Login: **{st.session_state['user_nama']}**")
-            if st.button("🚪 LOG OUT"):
-                st.session_state['user_nama'] = None
-                st.session_state['user_pin'] = None
-                st.rerun()
+            st.success(f"Halo, {st.session_state['user_nama']}")
+            if st.button("🚪 KELUAR"):
+                st.session_state['user_nama'] = None; st.session_state['user_pin'] = None; st.rerun()
 
-    # --- AREA UTAMA ---
+    # --- MENU UTAMA ---
     if st.session_state['user_nama']:
-        nama_aktif = st.session_state['user_nama']
-        pin_aktif  = st.session_state['user_pin']
-        
+        user = st.session_state['user_nama']
+        pin  = st.session_state['user_pin']
+
         # === FITUR OWNER ===
-        if nama_aktif == "OWNER":
-            st.error("🔧 **MENU SUPER ADMIN**")
-            tab_bos1, tab_bos2, tab_bos3 = st.tabs(["🛒 Status Gerobak", "👥 Kelola Staff", "📋 Kelola Menu"])
+        if user == "OWNER":
+            st.error("🔧 **MENU ADMIN BOS**")
+            t1, t2, t3 = st.tabs(["Gerobak", "Staff", "Menu Harga"])
             
-            with tab_bos1:
-                st.write("Reset Data Shift:")
-                db_gerobak_bos = load_json(FILE_DB_GEROBAK)
-                for g_nama in list(DATA_GEROBAK.values()):
-                    info_g = db_gerobak_bos.get(g_nama)
-                    col_a, col_b = st.columns([3, 1])
-                    if info_g:
-                        col_a.markdown(f"**{g_nama}** : 🔴 AKTIF ({info_g['pic']})")
-                        if col_b.button(f"FORCE CLOSE", key=f"del_{g_nama}"):
-                            del db_gerobak_bos[g_nama]
-                            save_json(FILE_DB_GEROBAK, db_gerobak_bos)
-                            st.rerun()
-                    else:
-                        col_a.markdown(f"**{g_nama}** : 🟢 KOSONG")
+            with t1: # Reset Shift
+                st.write("Status Shift:")
+                db_gerobak = load_json(FILE_DB_GEROBAK)
+                for g_nama in DATA_GEROBAK.values():
+                    if g_nama in db_gerobak:
+                        st.write(f"🔴 {g_nama} (Aktif: {db_gerobak[g_nama]['pic']})")
+                        if st.button(f"Reset {g_nama}", key=g_nama):
+                            del db_gerobak[g_nama]
+                            save_json(FILE_DB_GEROBAK, db_gerobak); st.rerun()
+                    else: st.write(f"🟢 {g_nama} (Kosong)")
             
-            with tab_bos2:
-                data_staff_bos = load_json(FILE_DB_STAFF)
-                if data_staff_bos:
-                    df_staff = pd.DataFrame(list(data_staff_bos.items()), columns=['PIN', 'NAMA'])
-                    st.dataframe(df_staff, hide_index=True, use_container_width=True)
-                    list_pilihan = [f"{v} (PIN: {k})" for k,v in data_staff_bos.items()]
-                    pilih_hapus = st.selectbox("Hapus Staff:", list_pilihan)
-                    if st.button("Hapus Staff"):
-                        pin_target = pilih_hapus.split("PIN: ")[1].replace(")", "")
-                        if hapus_staff(pin_target): st.rerun()
-            
-            with tab_bos3:
-                st.subheader("Daftar Menu & Harga")
-                df_menu = pd.DataFrame(list(MENU_SEKARANG.items()), columns=['Nama Menu', 'Harga'])
-                st.dataframe(df_menu, hide_index=True, use_container_width=True)
+            with t2: # Hapus Staff
+                data_s = load_json(FILE_DB_STAFF)
+                st.dataframe(pd.DataFrame(list(data_s.items()), columns=['PIN', 'NAMA']), hide_index=True)
+                hapus = st.selectbox("Hapus Staff:", [f"{v} ({k})" for k,v in data_s.items()])
+                if st.button("Hapus"): hapus_staff(hapus.split('(')[1][:-1]); st.rerun()
+
+            with t3: # Kelola Menu
+                st.dataframe(pd.DataFrame(list(MENU_SEKARANG.items()), columns=['Menu', 'Harga']), hide_index=True)
+                c1, c2 = st.columns(2)
+                nm = c1.text_input("Nama Menu")
+                hrg = c2.number_input("Harga", step=500)
+                if st.button("Simpan Menu"): simpan_menu_baru(nm, hrg); st.rerun()
                 
-                col_m1, col_m2 = st.columns(2)
-                with col_m1: input_menu_nama = st.text_input("Nama Menu Baru / Edit")
-                with col_m2: input_menu_harga = st.number_input("Harga Jual", min_value=0, step=500)
-                
-                if st.button("💾 Simpan Menu"):
-                    if input_menu_nama and input_menu_harga > 0:
-                        simpan_menu_baru(input_menu_nama, input_menu_harga)
-                        st.success(f"Menu {input_menu_nama} disimpan!")
-                        st.rerun()
-                
-                st.write("Hapus Menu:")
-                pilih_hapus_menu = st.selectbox("Pilih Menu:", list(MENU_SEKARANG.keys()))
-                if st.button("🗑️ Hapus Menu"):
-                    hapus_menu(pilih_hapus_menu); st.rerun()
+                hps = st.selectbox("Hapus Menu:", list(MENU_SEKARANG.keys()))
+                if st.button("Hapus Menu Terpilih"): hapus_menu(hps); st.rerun()
             st.divider()
 
-        # === OPERASIONAL STAFF ===
-        st.subheader(f"📍 Operasional Toko")
-        pilihan_gerobak = st.selectbox("Lokasi:", list(DATA_GEROBAK.values()))
+        # === OPERASIONAL ===
+        st.subheader("📍 Operasional")
+        lokasi = st.selectbox("Pilih Lokasi:", list(DATA_GEROBAK.values()))
         
-        db_gerobak = load_json(FILE_DB_GEROBAK) 
-        data_shift = db_gerobak.get(pilihan_gerobak)
-        
-        if data_shift:
-            if data_shift['pin_pic'] == pin_aktif:
-                st.info(f"⚡ SHIFT ANDA AKTIF ({data_shift['jam_masuk']})")
-            else:
-                st.warning(f"⚠️ Shift Aktif: **{data_shift['pic']}**")
-        else:
-            st.success("✅ Siap Buka Shift")
+        db_gerobak = load_json(FILE_DB_GEROBAK)
+        shift = db_gerobak.get(lokasi)
 
-        tab1, tab2 = st.tabs(["☀️ OPENING", "🌙 CLOSING"])
+        if shift: st.info(f"⚡ Shift Aktif: {shift['pic']} ({shift['jam_masuk']})")
+        else: st.success("✅ Gerobak Kosong")
 
-        with tab1: # OPENING
-            if data_shift and data_shift['pin_pic'] != pin_aktif:
-                st.error(f"⛔ Shift dipegang {data_shift['pic']}.")
+        tab_op, tab_cl = st.tabs(["☀️ OPENING (Stok)", "🌙 CLOSING (Setor)"])
+
+        with tab_op:
+            if shift and shift['pin_pic'] != pin: st.error("⛔ Shift orang lain!")
             else:
-                with st.form("form_opening"):
-                    st.write("📦 **Stok Awal:**")
-                    stok_input = {}
-                    col1, col2 = st.columns(2)
-                    i = 0
-                    for menu in MENU_SEKARANG:
-                        val = data_shift['stok'].get(menu, 0) if data_shift else 0
-                        with (col1 if i % 2 == 0 else col2):
-                            stok_input[menu] = st.number_input(f"{menu}", min_value=0, value=int(val))
-                        i += 1
+                with st.form("opening"):
+                    st.write("📦 Input Stok Awal:")
+                    stok_in = {}
+                    cols = st.columns(2)
+                    for i, m in enumerate(MENU_SEKARANG):
+                        val = shift['stok'].get(m, 0) if shift else 0
+                        with cols[i%2]: stok_in[m] = st.number_input(f"{m}", value=int(val), min_value=0)
                     
                     if st.form_submit_button("SIMPAN OPENING"):
-                        jam_skrg = datetime.now().strftime("%H:%M")
-                        data_baru = {
-                            "tanggal": datetime.now().strftime("%Y-%m-%d"),
-                            "jam_masuk": data_shift['jam_masuk'] if data_shift else jam_skrg,
-                            "pic": nama_aktif, "pin_pic": pin_aktif, "stok": stok_input
-                        }
-                        db_gerobak[pilihan_gerobak] = data_baru
+                        jam = datetime.now().strftime("%H:%M")
+                        data = {"tanggal": datetime.now().strftime("%Y-%m-%d"), "jam_masuk": shift['jam_masuk'] if shift else jam, "pic": user, "pin_pic": pin, "stok": stok_in}
+                        db_gerobak[lokasi] = data
                         save_json(FILE_DB_GEROBAK, db_gerobak)
-                        
-                        list_stok = [f"{k}: {v}" for k,v in stok_input.items()]
-                        msg = (f"☀️ *OPENING*\n📍 {pilihan_gerobak}\n👤 {nama_aktif}\n"
-                               f"🕒 {data_baru['jam_masuk']}\n📦 Stok: {', '.join(list_stok)}")
-                        kirim_telegram(msg)
-                        st.success("Tersimpan!"); st.rerun()
+                        kirim_telegram(f"☀️ OPENING {lokasi}\n👤 {user}\n📦 Stok Terisi")
+                        st.success("Masuk!"); st.rerun()
 
-        with tab2: # CLOSING
-            if not data_shift:
-                st.info("Belum ada data Opening.")
-            elif data_shift['pin_pic'] != pin_aktif:
-                st.error("⛔ Bukan shift Anda!")
+        with tab_cl:
+            if not shift: st.info("Buka shift dulu.")
+            elif shift['pin_pic'] != pin: st.error("⛔ Bukan shift Anda.")
             else:
-                with st.form("form_closing"):
-                    st.write("📊 **Hitung Jualan:**")
-                    stok_awal = data_shift['stok']
+                with st.form("closing"):
+                    st.write("📊 Hitung Sisa:")
                     omzet = 0
-                    txt_jual = []
-                    list_excel_rows = []
-                    
-                    jam_pulang = datetime.now().strftime("%H:%M")
-                    tanggal_ini = datetime.now().strftime("%Y-%m-%d")
+                    jual_list = []
+                    excel_rows = []
+                    tgl = datetime.now().strftime("%Y-%m-%d")
+                    jam_plg = datetime.now().strftime("%H:%M")
 
-                    for menu, harga in MENU_SEKARANG.items():
-                        awal = int(stok_awal.get(menu, 0))
-                        sisa = st.number_input(f"Sisa {menu} (Awal: {awal})", min_value=0, max_value=awal)
+                    for m, hrg in MENU_SEKARANG.items():
+                        awal = int(shift['stok'].get(m, 0))
+                        sisa = st.number_input(f"Sisa {m} (Awal: {awal})", max_value=awal, min_value=0)
                         laku = awal - sisa
-                        omzet += (laku * harga)
-                        
-                        if laku > 0: txt_jual.append(f"{menu}: {laku}")
-                        
-                        list_excel_rows.append({
-                            "TANGGAL": tanggal_ini, "JAM_MASUK": data_shift['jam_masuk'], 
-                            "JAM_PULANG": jam_pulang, "GEROBAK": pilihan_gerobak, 
-                            "STAFF": nama_aktif, "ITEM": menu, "AWAL": awal, 
-                            "SISA": sisa, "TERJUAL": laku, "OMZET_ITEM": (laku * harga),
-                            "TIPE": "TRANSAKSI"
-                        })
+                        duit = laku * hrg
+                        omzet += duit
+                        if laku > 0: jual_list.append(f"{m}: {laku}")
+                        excel_rows.append({"TANGGAL": tgl, "GEROBAK": lokasi, "STAFF": user, "ITEM": m, "AWAL": awal, "SISA": sisa, "TERJUAL": laku, "OMZET_ITEM": duit, "TIPE": "JUAL"})
 
-                    st.info(f"💰 Target Setoran: **{format_rupiah(omzet)}**")
-                    col_u1, col_u2 = st.columns(2)
-                    with col_u1: tunai = st.number_input("Setor Tunai", step=1000)
-                    with col_u2: qris = st.number_input("Setor QRIS", step=1000)
-                    catatan = st.text_area("Catatan")
+                    st.markdown(f"### 💰 Total Sistem: {format_rupiah(omzet)}")
+                    tunai = st.number_input("Fisik Tunai", step=500)
+                    qris = st.number_input("Bukti QRIS", step=500)
+                    note = st.text_area("Catatan")
 
                     if st.form_submit_button("KIRIM LAPORAN"):
-                        selisih = (tunai + qris) - omzet
-                        status = "✅ PAS" if selisih == 0 else (f"⚠️ MINUS {selisih}" if selisih < 0 else f"ℹ️ LEBIH {selisih}")
+                        selisih = (tunai+qris) - omzet
+                        stat = "PAS" if selisih==0 else (f"MINUS {selisih}" if selisih<0 else f"LEBIH {selisih}")
                         
-                        msg = (f"🌙 *CLOSING*\n📍 {pilihan_gerobak}\n👤 {nama_aktif}\n"
-                               f"🕒 Shift: {data_shift['jam_masuk']} - {jam_pulang}\n\n"
-                               f"📊 Jualan: {', '.join(txt_jual) if txt_jual else 'ZONK'}\n"
-                               f"💰 Target: {format_rupiah(omzet)}\n"
-                               f"💵 Tunai: {format_rupiah(tunai)}\n💳 QRIS: {format_rupiah(qris)}\n"
-                               f"Status: {status}\n📝 {catatan}")
-                        kirim_telegram(msg)
-                        
-                        list_excel_rows.append({
-                            "TANGGAL": tanggal_ini, "JAM_MASUK": data_shift['jam_masuk'], 
-                            "JAM_PULANG": jam_pulang, "GEROBAK": pilihan_gerobak, 
-                            "STAFF": nama_aktif, "ITEM": "TOTAL SETORAN", 
-                            "AWAL": 0, "SISA": 0, "TERJUAL": 0, "OMZET_ITEM": (tunai + qris),
-                            "TIPE": "SETORAN"
-                        })
-                        
-                        simpan_ke_excel_database(list_excel_rows)
+                        excel_rows.append({"TANGGAL": tgl, "GEROBAK": lokasi, "STAFF": user, "ITEM": "SETORAN", "AWAL":0,"SISA":0,"TERJUAL":0, "OMZET_ITEM": (tunai+qris), "TIPE": "SETORAN"})
+                        simpan_ke_excel_database(excel_rows)
                         kirim_file_excel_telegram()
                         
-                        del db_gerobak[pilihan_gerobak]
+                        msg = f"🌙 CLOSING {lokasi}\n👤 {user}\n💰 Target: {format_rupiah(omzet)}\n💵 Setor: {format_rupiah(tunai+qris)}\n📝 Status: {stat}\nCatatan: {note}"
+                        kirim_telegram(msg)
+                        
+                        del db_gerobak[lokasi]
                         save_json(FILE_DB_GEROBAK, db_gerobak)
-                        st.success("Sukses!"); st.balloons(); st.rerun()
+                        st.success("Laporan Terkirim!"); st.balloons(); st.rerun()
     else:
-        st.info("👈 Silakan Login dulu.")
+        st.info("👈 Silakan Login di menu samping.")
 
 if __name__ == "__main__":
     main()
-                        
+            
