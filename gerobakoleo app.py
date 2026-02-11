@@ -8,30 +8,27 @@ from datetime import datetime
 TOKEN_BOT  = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4"
 ID_OWNER   = "8505488457"
 PIN_OWNER  = "8888" 
-NAMA_SHEET = "DATABASE_GEROBAK_APP" # Pastikan nama file di Google Drive SAMA
 
-# ================= KONEKSI GOOGLE SHEETS (STABIL) =================
+# 👇 ID INI DIAMBIL DARI LINK YANG ANDA KIRIM 👇
+SHEET_ID = "1zDBbDk91VpnBfK4gBkoZAtEkeSBXBFQwFnxqwKH-yyU"
+
+# ================= KONEKSI GOOGLE SHEETS (PAKAI ID) =================
 def connect_gsheet():
     try:
-        # Cek Secrets
         if "gcp_service_account" not in st.secrets:
-            st.error("❌ Secrets belum dimasukkan!")
+            st.error("❌ Secrets belum dimasukkan di Streamlit!")
             return None
         
-        # Login pakai gspread
+        # Ambil Credentials dari Secrets
         creds_dict = dict(st.secrets["gcp_service_account"])
         client = gspread.service_account_from_dict(creds_dict)
         
-        # Buka File
-        sheet = client.open(NAMA_SHEET)
+        # BUKA LANGSUNG PAKAI ID (PASTI KETEMU)
+        sheet = client.open_by_key(SHEET_ID)
         return sheet
-    except gspread.SpreadsheetNotFound:
-        st.error(f"❌ File '{NAMA_SHEET}' Masih Tidak Ditemukan.")
-        st.warning("👉 Pastikan nama file di Google Drive: DATABASE_GEROBAK_APP (Huruf Besar Semua).")
-        st.warning("👉 Pastikan email 'oging-754@data87.iam.gserviceaccount.com' sudah dijadikan EDITOR.")
-        return None
     except Exception as e:
         st.error(f"❌ Error Koneksi: {e}")
+        st.warning("👉 Pastikan bot (email: oging-754@... ) sudah dijadikan EDITOR di file tersebut.")
         return None
 
 def get_waktu_wib():
@@ -48,15 +45,14 @@ def kirim_telegram(pesan):
 def format_rupiah(angka):
     return f"Rp {int(angka):,}".replace(",", ".")
 
-# ================= FUNGSI BACA/TULIS DATA =================
+# ================= FUNGSI DATABASE (CRUD) =================
 
 def load_data_staff():
     try:
         sh = connect_gsheet()
         if not sh: return {}
-        try:
-            ws = sh.worksheet("STAFF")
-        except:
+        try: ws = sh.worksheet("STAFF")
+        except: 
             ws = sh.add_worksheet(title="STAFF", rows=100, cols=5)
             ws.append_row(["PIN", "NAMA"])
         
@@ -86,10 +82,9 @@ def delete_staff_by_pin(pin):
 def load_data_menu():
     try:
         sh = connect_gsheet()
-        if not sh: return {}
-        try:
-            ws = sh.worksheet("MENU")
-        except:
+        if not sh: return {"Kopi Hitam": 5000}
+        try: ws = sh.worksheet("MENU")
+        except: 
             ws = sh.add_worksheet(title="MENU", rows=100, cols=5)
             ws.append_row(["NAMA_MENU", "HARGA"])
             ws.append_row(["Kopi Hitam", 5000])
@@ -114,9 +109,8 @@ def save_menu_update(menu_dict):
 def load_data_cabang():
     try:
         sh = connect_gsheet()
-        if not sh: return {}
-        try:
-            ws = sh.worksheet("CABANG")
+        if not sh: return {"1": "Gerobak Pusat"}
+        try: ws = sh.worksheet("CABANG")
         except:
             ws = sh.add_worksheet(title="CABANG", rows=100, cols=5)
             ws.append_row(["ID", "NAMA_CABANG"])
@@ -143,12 +137,11 @@ def load_shift_active(nama_cabang):
     try:
         sh = connect_gsheet()
         if not sh: return None
-        try:
-            ws = sh.worksheet("SHIFT")
-        except:
-             ws = sh.add_worksheet(title="SHIFT", rows=100, cols=10)
-             ws.append_row(["CABANG", "PIC", "PIN_PIC", "JAM_MASUK", "STOK_AWAL"])
-
+        try: ws = sh.worksheet("SHIFT")
+        except: 
+            ws = sh.add_worksheet(title="SHIFT", rows=100, cols=10)
+            ws.append_row(["CABANG", "PIC", "PIN_PIC", "JAM_MASUK", "STOK_AWAL"])
+        
         records = ws.get_all_records()
         for row in records:
             if row['CABANG'] == nama_cabang:
@@ -163,9 +156,7 @@ def save_shift_opening(cabang, pic, pin, stok_dict):
     try:
         sh = connect_gsheet()
         ws = sh.worksheet("SHIFT")
-        # Jika header belum ada
         if not ws.row_values(1): ws.append_row(["CABANG", "PIC", "PIN_PIC", "JAM_MASUK", "STOK_AWAL"])
-        
         jam = get_waktu_wib().strftime("%H:%M")
         ws.append_row([cabang, pic, str(pin), jam, str(stok_dict)])
         return jam
@@ -185,14 +176,12 @@ def delete_shift_closing(cabang):
 def save_laporan_final(data_rows):
     try:
         sh = connect_gsheet()
-        try:
-            ws = sh.worksheet("LAPORAN")
+        try: ws = sh.worksheet("LAPORAN")
         except:
-             ws = sh.add_worksheet(title="LAPORAN", rows=1000, cols=15)
-             ws.append_row(["TANGGAL", "JAM_MASUK", "JAM_PULANG", "GEROBAK", "STAFF", "ITEM", "AWAL", "SISA", "TERJUAL", "OMZET"])
-
-        if not ws.row_values(1):
+            ws = sh.add_worksheet(title="LAPORAN", rows=1000, cols=15)
             ws.append_row(["TANGGAL", "JAM_MASUK", "JAM_PULANG", "GEROBAK", "STAFF", "ITEM", "AWAL", "SISA", "TERJUAL", "OMZET"])
+        
+        if not ws.row_values(1): ws.append_row(["TANGGAL", "JAM_MASUK", "JAM_PULANG", "GEROBAK", "STAFF", "ITEM", "AWAL", "SISA", "TERJUAL", "OMZET"])
         
         for row in data_rows:
              ws.append_row([
@@ -206,7 +195,7 @@ def save_laporan_final(data_rows):
 # ================= APLIKASI WEB UTAMA =================
 def main():
     st.set_page_config(page_title="Kasir Cloud", page_icon="☁️", layout="centered")
-    st.title("☁️ Kasir Gerobak (Google Sheets)")
+    st.title("☁️ Kasir Gerobak (Online)")
 
     # LOAD DATA 
     DATA_GEROBAK = {}
@@ -214,18 +203,15 @@ def main():
     DATA_STAFF = {}
 
     try:
-        # Cek koneksi dulu
         sheet = connect_gsheet()
         if sheet:
-            with st.spinner("Mengambil Data..."):
+            with st.spinner("Sedang Memuat Data..."):
                 DATA_GEROBAK = load_data_cabang()
                 MENU_HARGA = load_data_menu()
                 DATA_STAFF = load_data_staff()
-        else:
-            st.stop() # Berhenti jika koneksi gagal
+        else: st.stop()
     except Exception as e:
-        st.error(f"Error Loading Data: {e}")
-        st.stop()
+        st.error(f"Gagal Load Data: {e}"); st.stop()
 
     if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
     if 'user_pin' not in st.session_state: st.session_state['user_pin'] = None
@@ -278,46 +264,35 @@ def main():
                     DATA_GEROBAK[next_id] = nama_cab
                     save_cabang_update(DATA_GEROBAK)
                     st.rerun()
-                
                 if DATA_GEROBAK:
                     hapus_c = st.selectbox("Hapus", list(DATA_GEROBAK.values()))
                     if st.button("Hapus Cabang"):
                         key = next((k for k, v in DATA_GEROBAK.items() if v == hapus_c), None)
-                        if key: 
-                            del DATA_GEROBAK[key]
-                            save_cabang_update(DATA_GEROBAK)
-                            st.rerun()
+                        if key: del DATA_GEROBAK[key]; save_cabang_update(DATA_GEROBAK); st.rerun()
 
             with t2:
                 st.dataframe(pd.DataFrame(list(DATA_STAFF.items()), columns=['PIN', 'NAMA']))
                 if DATA_STAFF:
                     hapus_s = st.selectbox("Hapus Staff", [f"{v} - {k}" for k,v in DATA_STAFF.items()])
                     if st.button("Hapus Staff"):
-                        delete_staff_by_pin(hapus_s.split(" - ")[-1])
-                        st.rerun()
+                        delete_staff_by_pin(hapus_s.split(" - ")[-1]); st.rerun()
 
             with t3:
                 st.dataframe(pd.DataFrame(list(MENU_HARGA.items()), columns=['Menu', 'Harga']))
                 c1, c2 = st.columns(2)
-                nm = c1.text_input("Menu")
-                hr = c2.number_input("Harga", step=500)
+                nm = c1.text_input("Menu"); hr = c2.number_input("Harga", step=500)
                 if st.button("Simpan Menu"):
-                    MENU_HARGA[nm] = int(hr)
-                    save_menu_update(MENU_HARGA)
-                    st.rerun()
-                
+                    MENU_HARGA[nm] = int(hr); save_menu_update(MENU_HARGA); st.rerun()
                 if MENU_HARGA:
                     hps_m = st.selectbox("Hapus Menu", list(MENU_HARGA.keys()))
                     if st.button("Hapus Item"):
-                        del MENU_HARGA[hps_m]
-                        save_menu_update(MENU_HARGA)
-                        st.rerun()
+                        del MENU_HARGA[hps_m]; save_menu_update(MENU_HARGA); st.rerun()
             st.divider()
 
         # OPERASIONAL STAFF
         st.subheader("📍 Operasional")
         if not DATA_GEROBAK:
-            st.error("Belum ada data Gerobak/Cabang. Silakan tambah di Menu Admin.")
+            st.error("Belum ada data Gerobak/Cabang.")
         else:
             pilih_cabang = st.selectbox("Pilih Lokasi:", list(DATA_GEROBAK.values()))
             shift_data = load_shift_active(pilih_cabang)
@@ -336,12 +311,9 @@ def main():
                         cols = st.columns(2)
                         for i, (m, h) in enumerate(MENU_HARGA.items()):
                             with cols[i % 2]: stok_awal[m] = st.number_input(f"{m}", min_value=0)
-                        
                         if st.form_submit_button("SIMPAN OPENING"):
                             jam = save_shift_opening(pilih_cabang, user, pin, stok_awal)
-                            if jam:
-                                kirim_telegram(f"☀️ OPENING\n📍 {pilih_cabang}\n👤 {user}\n🕒 {jam}")
-                                st.success("Masuk Google Sheets!"); st.rerun()
+                            if jam: kirim_telegram(f"☀️ OPENING\n📍 {pilih_cabang}\n👤 {user}\n🕒 {jam}"); st.success("Tersimpan!"); st.rerun()
 
             with tab_cl:
                 if not shift_data: st.warning("Belum Opening.")
@@ -349,25 +321,15 @@ def main():
                 else:
                     with st.form("closing"):
                         st.write("Hitung Sisa:")
-                        omzet = 0
-                        jual_list = []
-                        excel_data = []
+                        omzet = 0; jual_list = []; excel_data = []
                         tgl = get_waktu_wib().strftime("%Y-%m-%d")
                         jam_pulang = get_waktu_wib().strftime("%H:%M")
 
                         for m, h in MENU_HARGA.items():
                             aw = shift_data['stok'].get(m, 0)
                             ss = st.number_input(f"Sisa {m} (Awal: {aw})", max_value=aw, min_value=0)
-                            lk = aw - ss
-                            duit = lk * h
-                            omzet += duit
-                            jual_list.append(f"{m}: {lk}")
-                            
-                            excel_data.append({
-                                "TANGGAL": tgl, "JAM_MASUK": shift_data['jam_masuk'], "JAM_PULANG": jam_pulang,
-                                "GEROBAK": pilih_cabang, "STAFF": user, "ITEM": m,
-                                "AWAL": aw, "SISA": ss, "TERJUAL": lk, "OMZET_ITEM": duit
-                            })
+                            lk = aw - ss; duit = lk * h; omzet += duit; jual_list.append(f"{m}: {lk}")
+                            excel_data.append({"TANGGAL": tgl, "JAM_MASUK": shift_data['jam_masuk'], "JAM_PULANG": jam_pulang, "GEROBAK": pilih_cabang, "STAFF": user, "ITEM": m, "AWAL": aw, "SISA": ss, "TERJUAL": lk, "OMZET_ITEM": duit})
 
                         st.info(f"💰 Target: {format_rupiah(omzet)}")
                         tunai = st.number_input("Tunai", step=1000)
@@ -378,15 +340,12 @@ def main():
 
                         if st.form_submit_button("KIRIM LAPORAN"):
                             status = "PAS" if selisih == 0 else ("LEBIH" if selisih > 0 else "MINUS")
-                            msg = (f"🌙 CLOSING\n📍 {pilih_cabang}\n👤 {user}\n📊 Omzet: {format_rupiah(omzet)}\n"
-                                   f"💵 Tunai: {format_rupiah(tunai)}\n💳 QRIS: {format_rupiah(qris)}\n"
-                                   f"Status: {status}\n📝 {catatan}")
-                            
+                            msg = (f"🌙 CLOSING\n📍 {pilih_cabang}\n👤 {user}\n📊 Omzet: {format_rupiah(omzet)}\n💵 Tunai: {format_rupiah(tunai)}\n💳 QRIS: {format_rupiah(qris)}\nStatus: {status}\n📝 {catatan}")
                             kirim_telegram(msg)
                             save_laporan_final(excel_data)
                             delete_shift_closing(pilih_cabang)
-                            st.success("Laporan Masuk Google Sheets!"); st.balloons(); st.rerun()
+                            st.success("Terkirim!"); st.balloons(); st.rerun()
 
 if __name__ == "__main__":
     main()
-        
+                
