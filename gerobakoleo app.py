@@ -107,44 +107,32 @@ def rapikan_excel(filename):
         wb = openpyxl.load_workbook(filename)
         ws = wb.active
         
-        # Styling Header
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="203764", end_color="203764", fill_type="solid")
         center = Alignment(horizontal="center", vertical="center")
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
         
-        # Format Header (Baris 1)
         for cell in ws[1]:
             cell.font = header_font
             cell.fill = header_fill
             cell.alignment = center
             cell.border = thin_border
 
-        # Loop per kolom untuk format angka dan lebar
         for col in ws.columns:
             max_len = 0
             col_letter = col[0].column_letter
-            
-            # Cek Judul Header Kolom Ini
             header_cell = ws[f"{col_letter}1"]
             header_text = str(header_cell.value).upper() if header_cell.value else ""
-            
-            # Tentukan apakah ini kolom duit?
             is_currency = any(x in header_text for x in ['OMZET', 'HARGA', 'TUNAI', 'QRIS', 'TOTAL'])
 
             for cell in col:
                 cell.border = thin_border
-                
-                # --- FORMAT RUPIAH DI DEPAN (FORCE) ---
-                if is_currency and cell.row > 1: 
-                    cell.number_format = '"Rp" #,##0' 
-                
+                if is_currency and cell.row > 1: cell.number_format = '"Rp" #,##0' 
                 try:
                     if cell.value and len(str(cell.value)) > max_len: max_len = len(str(cell.value))
                 except: pass
             
             ws.column_dimensions[col_letter].width = (max_len + 5)
-            
         wb.save(filename)
     except Exception as e:
         print(f"Error styling Excel: {e}")
@@ -155,7 +143,6 @@ def simpan_ke_excel_staff(data_rows, nama_staff):
         df_baru = pd.DataFrame(data_rows)
         
         if os.path.exists(nama_file):
-            # Timpa file lama dengan data gabungan agar format baru selalu diterapkan
             df_lama = pd.read_excel(nama_file)
             df_final = pd.concat([df_lama, df_baru], ignore_index=True)
             df_final.to_excel(nama_file, index=False)
@@ -225,7 +212,6 @@ def main():
             c2.metric("Total Staff", f"{len(ds)}")
             c3.metric("Total Menu", f"{len(MENU_SEKARANG)}")
             
-            # UPDATE: Tab Nama diganti "Gerobak"
             t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Kelola Gerobak", "📥 Laporan"])
             
             with t1: 
@@ -259,10 +245,8 @@ def main():
                     if st.button("Hapus Menu Terpilih"): hapus_menu(del_m); st.rerun()
 
             with t4: 
-                # UPDATE: Tampilan Tabel Lokasi
                 st.subheader("Daftar Gerobak & Lokasi")
                 if LOKASI_SEKARANG:
-                    # Tampilkan tabel simple
                     df_lokasi = pd.DataFrame(list(LOKASI_SEKARANG.items()), columns=['ID', 'Nama Gerobak - Lokasi'])
                     st.dataframe(df_lokasi, hide_index=True, use_container_width=True)
                 
@@ -273,14 +257,12 @@ def main():
                 ids = [int(k) for k in LOKASI_SEKARANG.keys()]
                 next_id = str(max(ids) + 1) if ids else "1"
                 
-                # Input Data Baru
                 input_id = c_l1.text_input("ID", value=next_id)
                 input_nama = c_l2.text_input("Nama Gerobak (Cth: Gerobak 01)")
                 input_lokasi = st.text_input("📍 Lokasi Fisik (Cth: Kampus Unand / Depan Masjid)")
                 
                 if st.button("💾 Simpan Gerobak"):
                     if input_nama and input_lokasi:
-                        # GABUNGKAN NAMA DAN LOKASI DISINI
                         nama_lengkap = f"{input_nama} - {input_lokasi}"
                         simpan_lokasi_baru(input_id, nama_lengkap)
                         st.success(f"Berhasil: {nama_lengkap}")
@@ -312,9 +294,7 @@ def main():
         # ================= FITUR STAFF =================
         if not LOKASI_SEKARANG: st.error("Database Kosong"); st.stop()
 
-        # UPDATE: Subheader
         st.subheader("📍 Pilih Posisi Gerobak")
-        # Selectbox akan menampilkan "Gerobak 1 - Unand" otomatis
         pilihan_gerobak = st.selectbox("Pilih Gerobak & Lokasi:", list(LOKASI_SEKARANG.values()))
         
         db_gerobak = load_json(FILE_DB_GEROBAK)
@@ -347,19 +327,13 @@ def main():
             else:
                 st.write("📝 **Persiapan Buka Toko**")
                 
-                # --- SOLUSI ANTI ENTER: HINDARI st.form ---
-                # Kita gunakan input biasa dan tombol biasa agar Enter tidak memicu Submit
-                stok_input = {}
-                cols = st.columns(2)
+                # --- SOLUSI ANTI ENTER ---
+                stok_input = {}; cols = st.columns(2)
                 for i, m in enumerate(MENU_SEKARANG):
                     with cols[i%2]: 
-                        # Input number tanpa form
                         stok_input[m] = st.number_input(f"Stok {m}", min_value=0, value=0)
                 
                 st.write("---")
-                st.caption("Pastikan stok sudah benar sebelum menekan tombol di bawah.")
-                
-                # Tombol biasa (st.button) tidak bereaksi terhadap Enter di input field
                 if st.button("🚀 BUKA SHIFT SEKARANG", key="btn_open"):
                     jam_skrg = get_wib_now().strftime("%H:%M")
                     
@@ -382,25 +356,32 @@ def main():
             else:
                 st.write("📝 **Laporan Penjualan**")
                 
-                # --- SOLUSI ANTI ENTER: HINDARI st.form ---
                 omzet_total = 0; list_transaksi = []
                 st.write("---")
                 
-                # Bagian Input Sisa Stok
+                # --- UPDATE LOGIKA: HANYA TAMPILKAN JIKA STOK AWAL > 0 ---
                 for m, harga_satuan in MENU_SEKARANG.items():
                     stok_awal = int(shift_aktif_di_lokasi['stok'].get(m, 0))
-                    # Input tanpa form
-                    sisa = st.number_input(f"Sisa {m} (Awal: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{m}")
                     
-                    terjual = stok_awal - sisa
-                    omzet_item = terjual * harga_satuan
-                    omzet_total += omzet_item
-                    
-                    list_transaksi.append({
-                        "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
-                        "ITEM": m, "HARGA": harga_satuan, "AWAL": stok_awal, "SISA": sisa, 
-                        "TERJUAL": terjual, "OMZET": omzet_item, "TIPE": "JUAL"
-                    })
+                    if stok_awal > 0:
+                        # TAMPILKAN INPUT
+                        sisa = st.number_input(f"Sisa {m} (Awal: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{m}")
+                        terjual = stok_awal - sisa
+                        omzet_item = terjual * harga_satuan
+                        omzet_total += omzet_item
+                        
+                        list_transaksi.append({
+                            "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
+                            "ITEM": m, "HARGA": harga_satuan, "AWAL": stok_awal, "SISA": sisa, 
+                            "TERJUAL": terjual, "OMZET": omzet_item, "TIPE": "JUAL"
+                        })
+                    else:
+                        # STOK 0 - SEMBUNYIKAN TAPI CATAT KE SISTEM (Agar Data Excel Rapi)
+                        list_transaksi.append({
+                            "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
+                            "ITEM": m, "HARGA": harga_satuan, "AWAL": 0, "SISA": 0, 
+                            "TERJUAL": 0, "OMZET": 0, "TIPE": "JUAL"
+                        })
                 
                 st.write("---")
                 st.markdown(f"### 💰 Total: {format_rupiah(omzet_total)}")
@@ -415,9 +396,7 @@ def main():
                     st.warning(f"⚠️ Selisih: {format_rupiah(total_setor - omzet_total)}")
 
                 st.write("---")
-                st.caption("Klik tombol di bawah HANYA jika sudah selesai.")
                 
-                # Tombol biasa (st.button) tidak bereaksi terhadap Enter
                 if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
                     list_transaksi.append({
                         "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
@@ -425,10 +404,8 @@ def main():
                     })
                     
                     with st.spinner("Menyimpan Laporan..."):
-                        # 1. Simpan Excel
                         nama_file_excel = simpan_ke_excel_staff(list_transaksi, user)
                         
-                        # 2. Telegram
                         rincian_text = ""
                         for item in list_transaksi:
                             if item['TIPE'] == 'JUAL' and item['TERJUAL'] > 0:
@@ -444,7 +421,6 @@ def main():
                         if nama_file_excel: kirim_file_excel_telegram(nama_file_excel)
                         kirim_telegram(msg)
                         
-                        # 3. Hapus Sesi
                         if pilihan_gerobak in db_gerobak:
                             del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
                     
@@ -454,3 +430,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+                    
