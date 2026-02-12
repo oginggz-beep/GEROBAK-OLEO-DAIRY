@@ -346,36 +346,34 @@ def main():
                 st.info("Toko sudah buka. Klik tab 'TUTUP TOKO' jika ingin pulang.")
             else:
                 st.write("📝 **Persiapan Buka Toko**")
-                with st.form("form_buka_toko"):
-                    stok_input = {}; cols = st.columns(2)
-                    for i, m in enumerate(MENU_SEKARANG):
-                        with cols[i%2]: stok_input[m] = st.number_input(f"Stok {m}", min_value=0, value=0)
+                
+                # --- SOLUSI ANTI ENTER: HINDARI st.form ---
+                # Kita gunakan input biasa dan tombol biasa agar Enter tidak memicu Submit
+                stok_input = {}
+                cols = st.columns(2)
+                for i, m in enumerate(MENU_SEKARANG):
+                    with cols[i%2]: 
+                        # Input number tanpa form
+                        stok_input[m] = st.number_input(f"Stok {m}", min_value=0, value=0)
+                
+                st.write("---")
+                st.caption("Pastikan stok sudah benar sebelum menekan tombol di bawah.")
+                
+                # Tombol biasa (st.button) tidak bereaksi terhadap Enter di input field
+                if st.button("🚀 BUKA SHIFT SEKARANG", key="btn_open"):
+                    jam_skrg = get_wib_now().strftime("%H:%M")
                     
-                    tombol_buka = st.form_submit_button("🚀 BUKA SHIFT SEKARANG")
-                    
-                    if tombol_buka:
-                        jam_skrg = get_wib_now().strftime("%H:%M")
-                        
-                        # --- FITUR BARU: GENERATE TEXT STOK AWAL ---
-                        list_stok_text = ""
-                        for item, jml in stok_input.items():
-                            if jml > 0: # Hanya tampilkan yang ada stoknya
-                                list_stok_text += f"\n📦 {item}: {jml}"
-                        if not list_stok_text: list_stok_text = "\n(Tidak ada stok diinput)"
+                    list_stok_text = ""
+                    for item, jml in stok_input.items():
+                        if jml > 0: list_stok_text += f"\n📦 {item}: {jml}"
+                    if not list_stok_text: list_stok_text = "\n(Tidak ada stok diinput)"
 
-                        # Simpan Data
-                        d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
-                        db_gerobak[pilihan_gerobak] = d
-                        save_json(FILE_DB_GEROBAK, db_gerobak)
-                        
-                        # Kirim Telegram dengan Rincian Stok
-                        msg_open = (f"☀️ OPENING {pilihan_gerobak}\n"
-                                    f"👤 {user}\n"
-                                    f"⏰ {jam_skrg}\n\n"
-                                    f"**STOK AWAL:**{list_stok_text}")
-                        
-                        kirim_telegram(msg_open)
-                        st.success("✅ Berhasil Buka!"); st.rerun()
+                    d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
+                    db_gerobak[pilihan_gerobak] = d
+                    save_json(FILE_DB_GEROBAK, db_gerobak)
+                    
+                    kirim_telegram(f"☀️ OPENING {pilihan_gerobak}\n👤 {user}\n⏰ {jam_skrg}\n\n**STOK AWAL:**{list_stok_text}")
+                    st.success("✅ Berhasil Buka!"); st.rerun()
 
         with t_cl:
             if not is_saya_di_sini:
@@ -383,60 +381,74 @@ def main():
                 else: st.info("Toko belum dibuka.")
             else:
                 st.write("📝 **Laporan Penjualan**")
-                with st.form("form_tutup_toko"):
-                    omzet_total = 0; list_transaksi = []
-                    st.write("---")
-                    for m, harga_satuan in MENU_SEKARANG.items():
-                        stok_awal = int(shift_aktif_di_lokasi['stok'].get(m, 0))
-                        sisa = st.number_input(f"Sisa {m} (Awal: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{m}")
-                        terjual = stok_awal - sisa; omzet_item = terjual * harga_satuan; omzet_total += omzet_item
-                        list_transaksi.append({
-                            "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
-                            "ITEM": m, "HARGA": harga_satuan, "AWAL": stok_awal, "SISA": sisa, 
-                            "TERJUAL": terjual, "OMZET": omzet_item, "TIPE": "JUAL"
-                        })
+                
+                # --- SOLUSI ANTI ENTER: HINDARI st.form ---
+                omzet_total = 0; list_transaksi = []
+                st.write("---")
+                
+                # Bagian Input Sisa Stok
+                for m, harga_satuan in MENU_SEKARANG.items():
+                    stok_awal = int(shift_aktif_di_lokasi['stok'].get(m, 0))
+                    # Input tanpa form
+                    sisa = st.number_input(f"Sisa {m} (Awal: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{m}")
                     
-                    st.write("---")
-                    st.markdown(f"### 💰 Total: {format_rupiah(omzet_total)}")
-                    c1, c2 = st.columns(2)
-                    uang_tunai = c1.number_input("Tunai", step=500); uang_qris = c2.number_input("QRIS", step=500)
-                    total_setor = uang_tunai + uang_qris; catatan = st.text_area("Catatan")
+                    terjual = stok_awal - sisa
+                    omzet_item = terjual * harga_satuan
+                    omzet_total += omzet_item
                     
-                    if (total_setor - omzet_total) != 0: st.warning(f"⚠️ Selisih: {format_rupiah(total_setor - omzet_total)}")
+                    list_transaksi.append({
+                        "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
+                        "ITEM": m, "HARGA": harga_satuan, "AWAL": stok_awal, "SISA": sisa, 
+                        "TERJUAL": terjual, "OMZET": omzet_item, "TIPE": "JUAL"
+                    })
+                
+                st.write("---")
+                st.markdown(f"### 💰 Total: {format_rupiah(omzet_total)}")
+                
+                c1, c2 = st.columns(2)
+                uang_tunai = c1.number_input("Tunai", step=500, key="uang_tunai")
+                uang_qris = c2.number_input("QRIS", step=500, key="uang_qris")
+                catatan = st.text_area("Catatan", key="catatan_closing")
+                
+                total_setor = uang_tunai + uang_qris
+                if (total_setor - omzet_total) != 0: 
+                    st.warning(f"⚠️ Selisih: {format_rupiah(total_setor - omzet_total)}")
 
-                    tombol_tutup = st.form_submit_button("🔒 TUTUP SHIFT & KIRIM")
-                    if tombol_tutup:
-                        list_transaksi.append({
-                            "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
-                            "ITEM": "SETORAN", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": total_setor, "TIPE": "SETORAN", "CATATAN": catatan
-                        })
+                st.write("---")
+                st.caption("Klik tombol di bawah HANYA jika sudah selesai.")
+                
+                # Tombol biasa (st.button) tidak bereaksi terhadap Enter
+                if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
+                    list_transaksi.append({
+                        "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
+                        "ITEM": "SETORAN", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": total_setor, "TIPE": "SETORAN", "CATATAN": catatan
+                    })
+                    
+                    with st.spinner("Menyimpan Laporan..."):
+                        # 1. Simpan Excel
+                        nama_file_excel = simpan_ke_excel_staff(list_transaksi, user)
                         
-                        with st.spinner("Menyimpan Laporan..."):
-                            # 1. Simpan Excel
-                            nama_file_excel = simpan_ke_excel_staff(list_transaksi, user)
-                            
-                            # 2. Generate Rincian Penjualan untuk Telegram
-                            rincian_text = ""
-                            for item in list_transaksi:
-                                if item['TIPE'] == 'JUAL' and item['TERJUAL'] > 0:
-                                    rincian_text += f"\n▫️ {item['ITEM']}: {item['TERJUAL']}"
-                            
-                            if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
-
-                            # 3. Kirim Telegram dengan Rincian
-                            msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
-                                   f"💰 **Omzet:** {format_rupiah(omzet_total)}\n"
-                                   f"💵 **Setor:** {format_rupiah(total_setor)}\n"
-                                   f"📝 **Catatan:** {catatan}")
-
-                            if nama_file_excel: kirim_file_excel_telegram(nama_file_excel)
-                            kirim_telegram(msg)
-                            
-                            # 4. Hapus Sesi
-                            if pilihan_gerobak in db_gerobak:
-                                del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
+                        # 2. Telegram
+                        rincian_text = ""
+                        for item in list_transaksi:
+                            if item['TIPE'] == 'JUAL' and item['TERJUAL'] > 0:
+                                rincian_text += f"\n▫️ {item['ITEM']}: {item['TERJUAL']}"
                         
-                        st.balloons(); st.success("Shift Berakhir."); st.rerun()
+                        if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
+
+                        msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
+                               f"💰 **Omzet:** {format_rupiah(omzet_total)}\n"
+                               f"💵 **Setor:** {format_rupiah(total_setor)}\n"
+                               f"📝 **Catatan:** {catatan}")
+
+                        if nama_file_excel: kirim_file_excel_telegram(nama_file_excel)
+                        kirim_telegram(msg)
+                        
+                        # 3. Hapus Sesi
+                        if pilihan_gerobak in db_gerobak:
+                            del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
+                    
+                    st.balloons(); st.success("Shift Berakhir."); st.rerun()
 
     else: st.info("👈 Login di Menu Kiri")
 
