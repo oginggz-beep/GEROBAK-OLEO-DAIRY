@@ -20,8 +20,8 @@ FILE_DB_LOKASI  = "database_lokasi.json"
 
 # Data Default
 MENU_DEFAULT = {
-    "Strawberry Milk": 10000, "Coklat Milk": 12000,
-    "Kopi Susu Aren": 15000, "Matcha Latte": 15000
+    "Fresh Milk": 8000, "Coklat Milk": 12000,
+    "Strawberry Milk": 15000, "Vanilla Milk": 15000
 }
 LOKASI_DEFAULT = {
     "1": "Gerobak 01 - Alun-Alun", 
@@ -42,15 +42,6 @@ def kirim_telegram(pesan):
         url = f"https://api.telegram.org/bot{TOKEN_BOT}/sendMessage"
         requests.post(url, data={"chat_id": ID_OWNER, "text": pesan}, timeout=3)
     except: pass
-
-def kirim_file_excel_telegram(filename_target):
-    if "PASTE_TOKEN" in TOKEN_BOT: return
-    if os.path.exists(filename_target):
-        try:
-            url = f"https://api.telegram.org/bot{TOKEN_BOT}/sendDocument"
-            with open(filename_target, 'rb') as f:
-                requests.post(url, data={'chat_id': ID_OWNER, 'caption': f'📊 Laporan: {filename_target}'}, files={'document': f}, timeout=10)
-        except: pass
 
 def load_json(filename):
     if os.path.exists(filename):
@@ -97,7 +88,7 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI EXCEL PER STAFF (FORMAT KOLOM BARU) =================
+# ================= 4. FUNGSI EXCEL PER STAFF (FORMAT DIPERBAIKI) =================
 def get_nama_file_excel(nama_staff):
     nama_clean = nama_staff.replace(" ", "_").upper()
     return f"LAPORAN_{nama_clean}.xlsx"
@@ -112,25 +103,24 @@ def rapikan_excel(filename):
         center = Alignment(horizontal="center", vertical="center")
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
         
-        # Format Header
+        # 1. Format Header
         for cell in ws[1]:
             cell.font = header_font; cell.fill = header_fill; cell.alignment = center; cell.border = thin_border
 
-        # Format Kolom
+        # 2. Format Kolom
         for col in ws.columns:
             max_len = 0
             col_letter = col[0].column_letter
             header_cell = ws[f"{col_letter}1"]
             header_text = str(header_cell.value).upper() if header_cell.value else ""
             
-            # Kolom yang isinya Uang
-            is_currency = any(x in header_text for x in ['CASH', 'QRIS', 'TOTAL', 'HARGA'])
+            # Format Uang (CASH, QRIS, TOTAL)
+            is_currency = any(x in header_text for x in ['CASH', 'QRIS', 'TOTAL'])
 
             for cell in col:
                 cell.border = thin_border
                 if is_currency and cell.row > 1: 
                     try:
-                        # Pastikan value adalah angka sebelum diformat
                         if isinstance(cell.value, (int, float)):
                             cell.number_format = '"Rp" #,##0' 
                     except: pass
@@ -139,6 +129,7 @@ def rapikan_excel(filename):
                     if cell.value and len(str(cell.value)) > max_len: max_len = len(str(cell.value))
                 except: pass
             
+            # Tambah lebar sedikit biar lega
             ws.column_dimensions[col_letter].width = (max_len + 5)
         wb.save(filename)
     except Exception as e:
@@ -149,10 +140,12 @@ def simpan_ke_excel_staff(data_rows, nama_staff):
         nama_file = get_nama_file_excel(nama_staff)
         df_baru = pd.DataFrame(data_rows)
         
-        # Susun ulang urutan kolom agar sesuai permintaan
-        kolom_diinginkan = ["TANGGAL", "NAMA", "GEROBAK", "MENU", "TERJUAL", "CASH", "QRIS", "TOTAL", "CATATAN"]
-        # Filter hanya kolom yang ada (jaga-jaga error)
-        kolom_final = [k for k in kolom_diinginkan if k in df_baru.columns]
+        # --- PASTIKAN URUTAN KOLOM INI SAMA DENGAN DATA DI MAIN() ---
+        urutan_kolom = ["TANGGAL", "NAMA", "GEROBAK", "ITEM MENU", "TERJUAL", "CASH", "QRIS", "TOTAL", "CATATAN"]
+        
+        # Filter & Urutkan Kolom
+        # Kita pakai list comprehension untuk mengambil hanya kolom yg ada di data
+        kolom_final = [k for k in urutan_kolom if k in df_baru.columns]
         df_baru = df_baru[kolom_final]
 
         if os.path.exists(nama_file):
@@ -356,25 +349,24 @@ def main():
                 else: st.info("Toko belum dibuka.")
             else:
                 st.write("📝 **Laporan Penjualan**")
-                omzet_total = 0; list_transaksi = []
+                omzet_total = 0; list_penjualan_temporary = [] 
                 st.write("---")
                 
-                # Loop untuk Input Sisa
+                # Input Data Penjualan
                 for m, harga_satuan in MENU_SEKARANG.items():
                     stok_awal = int(shift_aktif_di_lokasi['stok'].get(m, 0))
-                    # Hanya tampilkan jika stok awal > 0 (sesuai request sebelumnya)
+                    # Logika: Hanya tampil jika stok awal > 0
                     if stok_awal > 0:
                         sisa = st.number_input(f"Sisa {m} (Awal: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{m}")
                         terjual = stok_awal - sisa
                         omzet_item = terjual * harga_satuan
                         omzet_total += omzet_item
                         
-                        # Simpan data sementara (belum termasuk cash/qris)
-                        list_transaksi.append({
-                            "MENU": m, 
-                            "HARGA": harga_satuan, 
-                            "TERJUAL": terjual,
-                            "OMZET": omzet_item
+                        # Simpan ke list sementara
+                        list_penjualan_temporary.append({
+                            "MENU": m,
+                            "HARGA": harga_satuan,
+                            "TERJUAL": terjual
                         })
                 
                 st.write("---")
@@ -394,15 +386,14 @@ def main():
                 if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
                     
                     # --- REKONSTRUKSI DATA UNTUK EXCEL ---
-                    # Kita buat daftar baru yang sudah include CASH, QRIS, TOTAL di setiap baris
-                    final_data_excel = []
+                    data_excel_final = []
                     
-                    if not list_transaksi: # Jika tidak ada barang terjual
-                         final_data_excel.append({
+                    if not list_penjualan_temporary:
+                        data_excel_final.append({
                             "TANGGAL": get_wib_now().strftime("%Y-%m-%d"),
                             "NAMA": user,
                             "GEROBAK": pilihan_gerobak,
-                            "MENU": "TIDAK ADA PENJUALAN",
+                            "ITEM MENU": "TIDAK ADA PENJUALAN",
                             "TERJUAL": 0,
                             "CASH": uang_tunai,
                             "QRIS": uang_qris,
@@ -410,29 +401,28 @@ def main():
                             "CATATAN": catatan
                         })
                     else:
-                        for item in list_transaksi:
-                            # Format Nama Menu + Harga: "Fresh Milk (8000)"
+                        for item in list_penjualan_temporary:
+                            # TAMPILAN MENU DI EXCEL: "Nama Menu (Harga)"
                             menu_display = f"{item['MENU']} ({int(item['HARGA'])})"
                             
-                            final_data_excel.append({
+                            data_excel_final.append({
                                 "TANGGAL": get_wib_now().strftime("%Y-%m-%d"),
                                 "NAMA": user,
                                 "GEROBAK": pilihan_gerobak,
-                                "MENU": menu_display,
+                                # Gunakan Key yang SAMA PERSIS dengan urutan_kolom di fungsi simpan_ke_excel_staff
+                                "ITEM MENU": menu_display,
                                 "TERJUAL": item['TERJUAL'],
-                                "CASH": uang_tunai, # Isi di setiap baris
-                                "QRIS": uang_qris,  # Isi di setiap baris
-                                "TOTAL": total_setor, # Isi di setiap baris
+                                "CASH": uang_tunai,
+                                "QRIS": uang_qris,
+                                "TOTAL": total_setor,
                                 "CATATAN": catatan
                             })
-
+                    
                     with st.spinner("Menyimpan Laporan..."):
-                        # Simpan ke Excel
-                        nama_file_excel = simpan_ke_excel_staff(final_data_excel, user)
+                        nama_file_excel = simpan_ke_excel_staff(data_excel_final, user)
                         
-                        # Generate Text untuk Telegram
                         rincian_text = ""
-                        for item in list_transaksi:
+                        for item in list_penjualan_temporary:
                             if item['TERJUAL'] > 0:
                                 rincian_text += f"\n▫️ {item['MENU']}: {item['TERJUAL']}"
                         
@@ -445,10 +435,8 @@ def main():
                                f"💰 **Total Setor:** {format_rupiah(total_setor)}\n"
                                f"📝 **Catatan:** {catatan}")
 
-                        # Kirim Telegram Text (Tanpa File)
                         kirim_telegram(msg)
                         
-                        # Hapus Sesi
                         if pilihan_gerobak in db_gerobak:
                             del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
                     
