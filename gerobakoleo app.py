@@ -43,7 +43,6 @@ def kirim_telegram(pesan):
         requests.post(url, data={"chat_id": ID_OWNER, "text": pesan}, timeout=3)
     except: pass
 
-# --- UPDATE: Kirim File Excel Spesifik ---
 def kirim_file_excel_telegram(filename_target):
     if "PASTE_TOKEN" in TOKEN_BOT: return
     if os.path.exists(filename_target):
@@ -98,9 +97,8 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI EXCEL PER STAFF (BARU) =================
+# ================= 4. FUNGSI EXCEL PER STAFF =================
 def get_nama_file_excel(nama_staff):
-    # Ubah nama staff jadi format file yang aman (Hilangkan spasi)
     nama_clean = nama_staff.replace(" ", "_").upper()
     return f"LAPORAN_{nama_clean}.xlsx"
 
@@ -124,7 +122,6 @@ def rapikan_excel(filename):
                 try:
                     if cell.value and len(str(cell.value)) > max_len: max_len = len(str(cell.value))
                 except: pass
-                
                 header_text = ws[f"{col_letter}1"].value
                 if header_text and any(x in str(header_text).upper() for x in ['OMZET', 'HARGA', 'TUNAI', 'QRIS', 'TOTAL']):
                     cell.number_format = '#,##0 "Rp"'
@@ -134,24 +131,21 @@ def rapikan_excel(filename):
 
 def simpan_ke_excel_staff(data_rows, nama_staff):
     try:
-        # Generate nama file berdasarkan nama staff
         nama_file = get_nama_file_excel(nama_staff)
-        
         df_baru = pd.DataFrame(data_rows)
         if os.path.exists(nama_file):
             df_lama = pd.read_excel(nama_file)
             df_final = pd.concat([df_lama, df_baru], ignore_index=True)
         else:
             df_final = df_baru
-            
         df_final.to_excel(nama_file, index=False)
         rapikan_excel(nama_file)
-        return nama_file # Kembalikan nama file agar bisa dikirim bot
+        return nama_file
     except Exception as e:
         st.error(f"❌ Gagal Simpan Excel: {e}")
         return None
 
-# ================= 5. TAMPILAN APLIKASI UTAMA =================
+# ================= 5. TAMPILAN APLIKASI =================
 def main():
     st.set_page_config(page_title="Sistem Gerobak Pro", page_icon="🏪", layout="centered")
     
@@ -251,29 +245,20 @@ def main():
                     del_lok = st.selectbox("Hapus Cabang:", [f"{k} - {v}" for k,v in LOKASI_SEKARANG.items()])
                     if st.button("Hapus Cabang"): hapus_lokasi(del_lok.split(' - ')[0]); st.rerun()
 
-            with t5: # UPDATE: DOWNLOAD PER STAFF
+            with t5: 
                 st.write("Unduh Laporan Per Staff:")
                 if ds:
-                    # Ambil daftar nama staff
                     list_nama_staff = list(ds.values())
                     pilih_staff_dl = st.selectbox("Pilih Staff:", list_nama_staff)
-                    
-                    # Generate nama file target
                     file_target = get_nama_file_excel(pilih_staff_dl)
                     
                     if os.path.exists(file_target):
                         st.success(f"File ditemukan: {file_target}")
                         with open(file_target, "rb") as file:
-                            st.download_button(
-                                label=f"📥 Download Excel {pilih_staff_dl}",
-                                data=file,
-                                file_name=file_target,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            )
+                            st.download_button(label=f"📥 Download Excel {pilih_staff_dl}", data=file, file_name=file_target, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                     else:
                         st.warning(f"Belum ada laporan dari staff: {pilih_staff_dl}")
-                else:
-                    st.warning("Belum ada data staff.")
+                else: st.warning("Belum ada data staff.")
             st.divider()
 
         # ================= FITUR STAFF =================
@@ -354,16 +339,28 @@ def main():
                             "ITEM": "SETORAN", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": total_setor, "TIPE": "SETORAN", "CATATAN": catatan
                         })
                         
-                        with st.spinner("Menyimpan Laporan Staff..."):
-                            # Simpan ke Excel Khusus Staff
+                        with st.spinner("Menyimpan Laporan..."):
+                            # 1. Simpan Excel
                             nama_file_excel = simpan_ke_excel_staff(list_transaksi, user)
                             
-                            # Kirim file spesifik ke Telegram
-                            if nama_file_excel:
-                                kirim_file_excel_telegram(nama_file_excel)
+                            # 2. Generate Rincian Penjualan untuk Telegram
+                            rincian_text = ""
+                            for item in list_transaksi:
+                                if item['TIPE'] == 'JUAL' and item['TERJUAL'] > 0:
+                                    rincian_text += f"\n▫️ {item['ITEM']}: {item['TERJUAL']}"
                             
-                            kirim_telegram(f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n💰 Omzet: {format_rupiah(omzet_total)}\n💵 Setor: {format_rupiah(total_setor)}\n📝 {catatan}")
+                            if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
+
+                            # 3. Kirim Telegram dengan Rincian
+                            msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
+                                   f"💰 **Omzet:** {format_rupiah(omzet_total)}\n"
+                                   f"💵 **Setor:** {format_rupiah(total_setor)}\n"
+                                   f"📝 **Catatan:** {catatan}")
+
+                            if nama_file_excel: kirim_file_excel_telegram(nama_file_excel)
+                            kirim_telegram(msg)
                             
+                            # 4. Hapus Sesi
                             if pilihan_gerobak in db_gerobak:
                                 del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
                         
@@ -373,4 +370,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-                    
+                        
