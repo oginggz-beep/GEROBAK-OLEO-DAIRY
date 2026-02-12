@@ -43,6 +43,7 @@ def kirim_telegram(pesan):
         requests.post(url, data={"chat_id": ID_OWNER, "text": pesan}, timeout=3)
     except: pass
 
+# Fungsi ini tetap ada tapi tidak dipanggil otomatis saat closing (sesuai request)
 def kirim_file_excel_telegram(filename_target):
     if "PASTE_TOKEN" in TOKEN_BOT: return
     if os.path.exists(filename_target):
@@ -113,10 +114,7 @@ def rapikan_excel(filename):
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
         
         for cell in ws[1]:
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = center
-            cell.border = thin_border
+            cell.font = header_font; cell.fill = header_fill; cell.alignment = center; cell.border = thin_border
 
         for col in ws.columns:
             max_len = 0
@@ -124,12 +122,10 @@ def rapikan_excel(filename):
             header_cell = ws[f"{col_letter}1"]
             header_text = str(header_cell.value).upper() if header_cell.value else ""
             
-            # Deteksi kolom duit
             is_currency = any(x in header_text for x in ['OMZET', 'HARGA', 'TUNAI', 'QRIS', 'TOTAL'])
 
             for cell in col:
                 cell.border = thin_border
-                # Format Rupiah di Depan
                 if is_currency and cell.row > 1: cell.number_format = '"Rp" #,##0' 
                 try:
                     if cell.value and len(str(cell.value)) > max_len: max_len = len(str(cell.value))
@@ -382,7 +378,7 @@ def main():
                 st.write("---")
                 
                 if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
-                    # --- UPDATE: PISAHKAN TUNAI DAN QRIS DI EXCEL ---
+                    # Pisahkan Tunai dan QRIS di Excel
                     list_transaksi.append({
                         "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
                         "ITEM": "SETORAN TUNAI", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": uang_tunai, "TIPE": "SETORAN", "CATATAN": catatan
@@ -401,7 +397,7 @@ def main():
                                 rincian_text += f"\n▫️ {item['ITEM']}: {item['TERJUAL']}"
                         if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
 
-                        # --- UPDATE: LAPORAN TELEGRAM RINCI ---
+                        # Laporan Telegram (TANPA KIRIM FILE EXCEL)
                         msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n"
                                f"📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
                                f"💵 **Tunai:** {format_rupiah(uang_tunai)}\n"
@@ -409,7 +405,9 @@ def main():
                                f"💰 **Total Setor:** {format_rupiah(total_setor)}\n"
                                f"📝 **Catatan:** {catatan}")
 
-                        if nama_file_excel: kirim_file_excel_telegram(nama_file_excel)
+                        # Perintah kirim file dimatikan (sesuai request)
+                        # if nama_file_excel: kirim_file_excel_telegram(nama_file_excel) 
+                        
                         kirim_telegram(msg)
                         
                         if pilihan_gerobak in db_gerobak:
