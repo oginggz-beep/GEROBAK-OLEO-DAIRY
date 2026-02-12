@@ -20,8 +20,8 @@ FILE_DB_LOKASI  = "database_lokasi.json"
 
 # Data Default
 MENU_DEFAULT = {
-    "Fresh Milk": 8000, "Coklat Milk": 12000,
-    "Strawberry Milk": 15000, "Vanilla Milk": 15000
+    "Strawberry Milk": 10000, "Coklat Milk": 12000,
+    "Kopi Susu Aren": 15000, "Matcha Latte": 15000
 }
 LOKASI_DEFAULT = {
     "1": "Gerobak 01 - Alun-Alun", 
@@ -88,7 +88,7 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI EXCEL PER STAFF (FORMAT DIPERBAIKI) =================
+# ================= 4. FUNGSI EXCEL (FORMAT HORIZONTAL) =================
 def get_nama_file_excel(nama_staff):
     nama_clean = nama_staff.replace(" ", "_").upper()
     return f"LAPORAN_{nama_clean}.xlsx"
@@ -114,41 +114,60 @@ def rapikan_excel(filename):
             header_cell = ws[f"{col_letter}1"]
             header_text = str(header_cell.value).upper() if header_cell.value else ""
             
-            # Format Uang (CASH, QRIS, TOTAL)
-            is_currency = any(x in header_text for x in ['CASH', 'QRIS', 'TOTAL'])
+            # Kolom Uang (CASH, QRIS, TOTAL)
+            is_currency = any(x in header_text for x in ['CASH', 'QRIS', 'TOTAL', 'OMZET'])
 
             for cell in col:
                 cell.border = thin_border
+                # Format Rupiah
                 if is_currency and cell.row > 1: 
                     try:
                         if isinstance(cell.value, (int, float)):
                             cell.number_format = '"Rp" #,##0' 
                     except: pass
                 
+                # Auto Width
                 try:
                     if cell.value and len(str(cell.value)) > max_len: max_len = len(str(cell.value))
                 except: pass
             
-            # Tambah lebar sedikit biar lega
-            ws.column_dimensions[col_letter].width = (max_len + 5)
+            # Batasi lebar maksimal agar tidak kepanjangan
+            final_width = max_len + 5
+            if final_width > 30: final_width = 30
+            ws.column_dimensions[col_letter].width = final_width
+
         wb.save(filename)
     except Exception as e:
         print(f"Error styling Excel: {e}")
 
-def simpan_ke_excel_staff(data_rows, nama_staff):
+def simpan_ke_excel_staff(data_dict, nama_staff):
+    """
+    Menerima data_dict (Satu baris data lengkap)
+    """
     try:
         nama_file = get_nama_file_excel(nama_staff)
-        df_baru = pd.DataFrame(data_rows)
+        # Bikin DataFrame dari 1 baris data (dict harus di-list-kan)
+        df_baru = pd.DataFrame([data_dict])
         
-        # --- PASTIKAN URUTAN KOLOM INI SAMA DENGAN DATA DI MAIN() ---
-        urutan_kolom = ["TANGGAL", "NAMA", "GEROBAK", "ITEM MENU", "TERJUAL", "CASH", "QRIS", "TOTAL", "CATATAN"]
+        # Pastikan urutan kolom rapi (Info Utama -> Menu -> Keuangan)
+        # Kita cari kolom menu secara dinamis
+        cols = list(df_baru.columns)
         
-        # Filter & Urutkan Kolom
-        # Kita pakai list comprehension untuk mengambil hanya kolom yg ada di data
-        kolom_final = [k for k in urutan_kolom if k in df_baru.columns]
-        df_baru = df_baru[kolom_final]
+        # Pisahkan kolom berdasarkan kategori
+        cols_utama = ["TANGGAL", "NAMA", "GEROBAK"]
+        cols_duit = ["TOTAL PCS", "CASH", "QRIS", "TOTAL OMZET", "CATATAN"]
+        cols_menu = [c for c in cols if c not in cols_utama and c not in cols_duit]
+        cols_menu.sort() # Urutkan menu sesuai abjad
+        
+        # Susun Ulang
+        final_cols = cols_utama + cols_menu + cols_duit
+        # Filter hanya kolom yg benar2 ada
+        final_cols = [c for c in final_cols if c in df_baru.columns]
+        
+        df_baru = df_baru[final_cols]
 
         if os.path.exists(nama_file):
+            # Gabung dengan data lama
             df_lama = pd.read_excel(nama_file)
             df_final = pd.concat([df_lama, df_baru], ignore_index=True)
             df_final.to_excel(nama_file, index=False)
@@ -349,26 +368,47 @@ def main():
                 else: st.info("Toko belum dibuka.")
             else:
                 st.write("📝 **Laporan Penjualan**")
-                omzet_total = 0; list_penjualan_temporary = [] 
+                
+                # --- STRUKTUR DATA UTAMA LAPORAN ---
+                # Kita akan menyusun satu baris dictionary yang berisi semua kolom
+                data_laporan_shift = {
+                    "TANGGAL": get_wib_now().strftime("%Y-%m-%d"),
+                    "NAMA": user,
+                    "GEROBAK": pilihan_gerobak,
+                }
+
+                omzet_total = 0
+                total_pcs_terjual = 0
+                rincian_telegram_text = ""
+                
                 st.write("---")
                 
-                # Input Data Penjualan
+                # Loop setiap menu untuk input sisa & hitung terjual
+                # Menu yang stok awal 0 tetap dihitung tapi hidden (input 0)
+                
                 for m, harga_satuan in MENU_SEKARANG.items():
                     stok_awal = int(shift_aktif_di_lokasi['stok'].get(m, 0))
-                    # Logika: Hanya tampil jika stok awal > 0
+                    
+                    # Logika tampilan input
                     if stok_awal > 0:
                         sisa = st.number_input(f"Sisa {m} (Awal: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{m}")
-                        terjual = stok_awal - sisa
-                        omzet_item = terjual * harga_satuan
-                        omzet_total += omzet_item
-                        
-                        # Simpan ke list sementara
-                        list_penjualan_temporary.append({
-                            "MENU": m,
-                            "HARGA": harga_satuan,
-                            "TERJUAL": terjual
-                        })
-                
+                    else:
+                        sisa = 0 # Otomatis 0 kalau stok awal 0
+                    
+                    terjual = stok_awal - sisa
+                    omzet_item = terjual * harga_satuan
+                    omzet_total += omzet_item
+                    total_pcs_terjual += terjual
+                    
+                    # --- KUNCI: Masukkan ke Data Laporan sebagai KOLOM ---
+                    # Nama Kolom = "Nama Menu (Harga)"
+                    nama_kolom_menu = f"{m} ({int(harga_satuan)})"
+                    data_laporan_shift[nama_kolom_menu] = terjual
+
+                    # Siapkan Text Telegram
+                    if terjual > 0:
+                        rincian_telegram_text += f"\n▫️ {m}: {terjual}"
+
                 st.write("---")
                 st.markdown(f"### 💰 Total: {format_rupiah(omzet_total)}")
                 
@@ -381,55 +421,25 @@ def main():
                 if (total_setor - omzet_total) != 0: 
                     st.warning(f"⚠️ Selisih: {format_rupiah(total_setor - omzet_total)}")
 
+                # Lengkapi Data Laporan
+                data_laporan_shift["TOTAL PCS"] = total_pcs_terjual
+                data_laporan_shift["CASH"] = uang_tunai
+                data_laporan_shift["QRIS"] = uang_qris
+                data_laporan_shift["TOTAL OMZET"] = total_setor
+                data_laporan_shift["CATATAN"] = catatan
+
                 st.write("---")
                 
                 if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
                     
-                    # --- REKONSTRUKSI DATA UNTUK EXCEL ---
-                    data_excel_final = []
-                    
-                    if not list_penjualan_temporary:
-                        data_excel_final.append({
-                            "TANGGAL": get_wib_now().strftime("%Y-%m-%d"),
-                            "NAMA": user,
-                            "GEROBAK": pilihan_gerobak,
-                            "ITEM MENU": "TIDAK ADA PENJUALAN",
-                            "TERJUAL": 0,
-                            "CASH": uang_tunai,
-                            "QRIS": uang_qris,
-                            "TOTAL": total_setor,
-                            "CATATAN": catatan
-                        })
-                    else:
-                        for item in list_penjualan_temporary:
-                            # TAMPILAN MENU DI EXCEL: "Nama Menu (Harga)"
-                            menu_display = f"{item['MENU']} ({int(item['HARGA'])})"
-                            
-                            data_excel_final.append({
-                                "TANGGAL": get_wib_now().strftime("%Y-%m-%d"),
-                                "NAMA": user,
-                                "GEROBAK": pilihan_gerobak,
-                                # Gunakan Key yang SAMA PERSIS dengan urutan_kolom di fungsi simpan_ke_excel_staff
-                                "ITEM MENU": menu_display,
-                                "TERJUAL": item['TERJUAL'],
-                                "CASH": uang_tunai,
-                                "QRIS": uang_qris,
-                                "TOTAL": total_setor,
-                                "CATATAN": catatan
-                            })
-                    
                     with st.spinner("Menyimpan Laporan..."):
-                        nama_file_excel = simpan_ke_excel_staff(data_excel_final, user)
+                        # Simpan ke Excel (Format Horizontal)
+                        simpan_ke_excel_staff(data_laporan_shift, user)
                         
-                        rincian_text = ""
-                        for item in list_penjualan_temporary:
-                            if item['TERJUAL'] > 0:
-                                rincian_text += f"\n▫️ {item['MENU']}: {item['TERJUAL']}"
-                        
-                        if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
+                        if not rincian_telegram_text: rincian_telegram_text = "\n(Tidak ada item terjual)"
 
                         msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n"
-                               f"📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
+                               f"📊 **RINCIAN TERJUAL:**{rincian_telegram_text}\n\n"
                                f"💵 **Tunai:** {format_rupiah(uang_tunai)}\n"
                                f"💳 **QRIS:** {format_rupiah(uang_qris)}\n"
                                f"💰 **Total Setor:** {format_rupiah(total_setor)}\n"
