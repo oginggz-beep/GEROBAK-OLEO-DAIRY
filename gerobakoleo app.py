@@ -497,7 +497,7 @@ def main():
                     st.error(f"⚠️ **ADA SELISIH: {format_rupiah(selisih)}**")
                     st.warning("Tombol kirim terkunci. Pastikan jumlah uang (Tunai + QRIS) SAMA PERSIS dengan Total Penjualan.")
 
-    else: st.info("👈 Login ada di Kiri atas")
+    else: st.info("☝️☝️ Login ada di Kiri atas 👈👈")
 
 if __name__ == "__main__":
     main()
