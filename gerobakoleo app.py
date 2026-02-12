@@ -11,7 +11,8 @@ import glob
 # ================= 1. KONFIGURASI UTAMA =================
 TOKEN_BOT = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4" 
 ID_OWNER  = "8505488457"  
-PIN_OWNER = "8888"        
+PIN_OWNER_LOGIN = "8888" # PIN untuk Login ke Menu Owner
+PASSWORD_RESET  = "ciroclistopel" # Password khusus untuk Hapus Data
 
 # ================= 2. DATABASE & FILE =================
 FILE_DB_GEROBAK = "database_gerobak.json" 
@@ -19,10 +20,10 @@ FILE_DB_STAFF   = "database_staff.json"
 FILE_DB_MENU    = "database_menu.json"    
 FILE_DB_LOKASI  = "database_lokasi.json"  
 
-# --- DATA DEFAULT BARU (3 KATEGORI) ---
+# --- DATA DEFAULT (3 KATEGORI) ---
 MENU_DEFAULT = {
     "Regular (Cup)": {
-        "Strawauauaua Milk": 10000, 
+        "Strawkuccciberry Milk": 10000, 
         "Coklat Milk": 12000,
         "Kopi Susu Aren": 15000
     },
@@ -82,7 +83,6 @@ def hapus_lokasi(id_lokasi):
 # --- FUNGSI MENU BARU (BERTINGKAT) ---
 def get_menu_aktif():
     data = load_json(FILE_DB_MENU)
-    # Validasi struktur: Jika data lama (flat), paksa reset ke default baru
     if not data or not isinstance(list(data.values())[0], dict): 
         save_json(FILE_DB_MENU, MENU_DEFAULT)
         return MENU_DEFAULT
@@ -135,7 +135,6 @@ def rapikan_excel(filename):
             header_text = str(header_cell.value).upper() if header_cell.value else ""
             
             is_currency = any(x in header_text for x in ['CASH', 'QRIS', 'TOTAL'])
-            # Kolom menu sekarang punya format "Kategori - Nama (Harga)"
             is_menu_col = "(" in header_text and ")" in header_text and "-" in header_text
 
             for cell in col:
@@ -167,11 +166,8 @@ def simpan_ke_excel_staff(list_transaksi, nama_staff, uang_tunai, uang_qris, tot
             "GEROBAK": list_transaksi[0]['GEROBAK'] if list_transaksi else "-",
         }
 
-        # Masukkan Data Menu (Dengan Nama Kategori agar unik)
         for item in list_transaksi:
             if item['TIPE'] == 'JUAL':
-                # Format Kolom: "Kategori - Menu (Harga)"
-                # Contoh: "Botol 250ml - Strawberry Milk (15000)"
                 col_name = f"{item['KATEGORI']} - {item['ITEM']} ({int(item['HARGA'])})"
                 data_row[col_name] = item['TERJUAL']
 
@@ -220,8 +216,8 @@ def main():
                 pin = st.text_input("Masukkan PIN", type="password", max_chars=6)
                 if st.button("Masuk Sistem"):
                     data_staff = load_json(FILE_DB_STAFF)
-                    if pin == PIN_OWNER:
-                        st.session_state['user_nama'] = "OWNER"; st.session_state['user_pin'] = PIN_OWNER; st.rerun()
+                    if pin == PIN_OWNER_LOGIN:
+                        st.session_state['user_nama'] = "OWNER"; st.session_state['user_pin'] = PIN_OWNER_LOGIN; st.rerun()
                     elif pin in data_staff:
                         st.session_state['user_nama'] = data_staff[pin]; st.session_state['user_pin'] = pin; st.rerun()
                     else: st.error("PIN Tidak Dikenal")
@@ -249,7 +245,6 @@ def main():
             db_gerobak = load_json(FILE_DB_GEROBAK)
             ds = load_json(FILE_DB_STAFF)
             
-            # Hitung total menu
             total_menu = sum(len(items) for items in MENU_SEKARANG.values())
             
             c1, c2, c3 = st.columns(3)
@@ -257,10 +252,9 @@ def main():
             c2.metric("Total Staff", f"{len(ds)}")
             c3.metric("Total Menu", f"{total_menu}")
             
-            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu (3 Kategori)", "📍 Kelola Gerobak", "📥 Laporan & Reset"])
+            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "📥 Reset"])
             
             with t1: 
-                st.write("**Status Operasional:**")
                 if not db_gerobak: st.caption("Semua gerobak tutup.")
                 for id_lok, nama_lok in LOKASI_SEKARANG.items():
                     info = db_gerobak.get(nama_lok)
@@ -271,18 +265,15 @@ def main():
                             st.write(f"⏰ **Buka:** {info['jam_masuk']}")
                             if st.button(f"⛔ PAKSA TUTUP / RESET {nama_lok}", key=f"kick_{id_lok}"):
                                 del db_gerobak[nama_lok]; save_json(FILE_DB_GEROBAK, db_gerobak); st.rerun()
-                        else: st.write("Kosong.")
             
             with t2: 
                 st.dataframe(pd.DataFrame(list(ds.items()), columns=['PIN','NAMA']), hide_index=True, use_container_width=True)
                 if ds:
-                    pilih = st.selectbox("Pilih Staff Hapus:", [f"{v} ({k})" for k,v in ds.items()])
-                    if st.button("Hapus Staff"): hapus_staff(pilih.split('(')[1][:-1]); st.rerun()
+                    pilih = st.selectbox("Hapus Staff:", [f"{v} ({k})" for k,v in ds.items()])
+                    if st.button("Hapus"): hapus_staff(pilih.split('(')[1][:-1]); st.rerun()
 
             with t3: 
                 st.write("**Kelola Menu Per Kategori**")
-                
-                # Input Tambah Menu
                 c_kat, c_nama, c_harga = st.columns(3)
                 kat_baru = c_kat.selectbox("Kategori:", ["Regular (Cup)", "Botol 250ml", "Botol 1 Liter"])
                 nama_baru = c_nama.text_input("Nama Menu")
@@ -294,47 +285,38 @@ def main():
                         st.success("Menu Disimpan!"); st.rerun()
 
                 st.divider()
-                # Tampilkan Menu per Kategori
                 for kat, items in MENU_SEKARANG.items():
                     with st.expander(f"📂 {kat} ({len(items)} menu)"):
                         if items:
                             df_menu = pd.DataFrame(list(items.items()), columns=['Nama Menu', 'Harga'])
                             st.dataframe(df_menu, hide_index=True, use_container_width=True)
-                            
-                            # Hapus Menu
                             to_del = st.selectbox(f"Hapus Menu di {kat}:", list(items.keys()), key=f"del_{kat}")
                             if st.button(f"Hapus {to_del}", key=f"btn_del_{kat}"):
                                 hapus_menu(kat, to_del); st.rerun()
-                        else:
-                            st.caption("Belum ada menu di kategori ini.")
 
             with t4: 
-                st.subheader("Daftar Gerobak & Lokasi")
+                st.subheader("Daftar Gerobak")
                 if LOKASI_SEKARANG:
                     df_lokasi = pd.DataFrame(list(LOKASI_SEKARANG.items()), columns=['ID', 'Nama Gerobak - Lokasi'])
                     st.dataframe(df_lokasi, hide_index=True, use_container_width=True)
                 
-                st.write("---")
-                st.write("**Tambah Gerobak Baru**")
                 c_l1, c_l2 = st.columns([1,3])
                 ids = [int(k) for k in LOKASI_SEKARANG.keys()]
                 next_id = str(max(ids) + 1) if ids else "1"
                 
                 input_id = c_l1.text_input("ID", value=next_id)
                 input_nama = c_l2.text_input("Nama Gerobak (Cth: Gerobak 01)")
-                input_lokasi = st.text_input("📍 Lokasi Fisik (Cth: Kampus Unand / Depan Masjid)")
+                input_lokasi = st.text_input("📍 Lokasi (Cth: Unand)")
                 
-                if st.button("💾 Simpan Gerobak"):
+                if st.button("💾 Simpan Lokasi"):
                     if input_nama and input_lokasi:
                         nama_lengkap = f"{input_nama} - {input_lokasi}"
                         simpan_lokasi_baru(input_id, nama_lengkap)
-                        st.success(f"Berhasil: {nama_lengkap}"); st.rerun()
-                    else: st.error("Nama Gerobak dan Lokasi wajib diisi!")
+                        st.rerun()
 
                 if LOKASI_SEKARANG:
-                    st.write("---")
-                    del_lok = st.selectbox("Hapus Gerobak:", [f"{k} - {v}" for k,v in LOKASI_SEKARANG.items()])
-                    if st.button("🗑️ Hapus Gerobak"): hapus_lokasi(del_lok.split(' - ')[0]); st.rerun()
+                    del_lok = st.selectbox("Hapus:", [f"{k} - {v}" for k,v in LOKASI_SEKARANG.items()])
+                    if st.button("🗑️ Hapus"): hapus_lokasi(del_lok.split(' - ')[0]); st.rerun()
 
             with t5: 
                 st.subheader("📥 Download Laporan")
@@ -344,33 +326,30 @@ def main():
                     file_target = get_nama_file_excel(pilih_staff_dl)
                     
                     if os.path.exists(file_target):
-                        st.success(f"File ditemukan: {file_target}")
                         with open(file_target, "rb") as file:
-                            st.download_button(label=f"📥 Download Excel {pilih_staff_dl}", data=file, file_name=file_target, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    else: st.warning(f"Belum ada laporan dari staff: {pilih_staff_dl}")
-                else: st.warning("Belum ada data staff.")
+                            st.download_button(label=f"📥 Download {pilih_staff_dl}", data=file, file_name=file_target, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    else: st.warning("Belum ada laporan.")
 
-                # --- FITUR RESET SYSTEM TOTAL (KIAMAT) ---
                 st.divider()
-                st.error("⚠️ ZONA BERBAHAYA (RESET TOTAL PABRIK)")
-                st.write("Tombol ini akan menghapus **SEMUA**: Staff, Menu, Lokasi, dan Laporan. Kembali seperti baru install.")
+                st.error("⚠️ RESET SEMUA DATA (DANGER)")
+                st.write("Menghapus: Staff, Menu, Lokasi, dan Semua Laporan.")
                 
                 with st.expander("🔴 Buka Menu Reset"):
-                    password_reset = st.text_input("Masukkan Password Owner:", type="password")
+                    password_reset = st.text_input("Masukkan Password Reset:", type="password")
                     
-                    if st.button("🔥 HAPUS SEMUA DATA & RESET SYSTEM"):
-                        if password_reset == PIN_OWNER:
+                    if st.button("🔥 HAPUS PERMANEN SEMUA DATA"):
+                        if password_reset == PASSWORD_RESET: # Cek Password ciroclistopel
                             try:
-                                # 1. Hapus File JSON Database
+                                # Hapus DB JSON
                                 files_db = [FILE_DB_GEROBAK, FILE_DB_STAFF, FILE_DB_MENU, FILE_DB_LOKASI]
                                 for fdb in files_db:
                                     if os.path.exists(fdb): os.remove(fdb)
                                 
-                                # 2. Hapus Semua File Excel Laporan
+                                # Hapus Excel Laporan
                                 file_excel = glob.glob("LAPORAN_*.xlsx")
                                 for f in file_excel: os.remove(f)
                                 
-                                st.success("✅ SYSTEM BERHASIL DI-RESET KE PENGATURAN PABRIK!")
+                                st.success("✅ SYSTEM RESET BERHASIL!")
                                 kirim_telegram("⚠️ SYSTEM ALERT: OWNER MELAKUKAN FULL RESET DATA.")
                                 st.rerun()
                             except Exception as e:
@@ -398,52 +377,43 @@ def main():
 
         if is_lokasi_terisi:
             if is_saya_di_sini: st.success(f"✅ ANDA SEDANG AKTIF DI: {pilihan_gerobak}")
-            else: st.error(f"⛔ {pilihan_gerobak} SEDANG DIPAKAI: {shift_aktif_di_lokasi['pic']}")
-        else: st.info(f"🟢 {pilihan_gerobak} Kosong. Siap Buka Shift.")
+            else: st.error(f"⛔ SEDANG DIPAKAI: {shift_aktif_di_lokasi['pic']}")
+        else: st.info(f"🟢 {pilihan_gerobak} Kosong.")
 
         t_op, t_cl = st.tabs(["☀️ BUKA TOKO", "🌙 TUTUP TOKO"])
 
         with t_op:
-            if lokasi_lain_user:
-                st.error("❌ AKSES DITOLAK"); st.warning(f"Anda masih aktif di **{lokasi_lain_user}**. Tutup dulu disana.")
-            elif is_lokasi_terisi and not is_saya_di_sini:
-                st.error(f"🔒 Gerobak dipakai {shift_aktif_di_lokasi['pic']}.")
-            elif is_saya_di_sini:
-                st.info("Toko sudah buka. Klik tab 'TUTUP TOKO' jika ingin pulang.")
+            if lokasi_lain_user: st.error("❌ Anda masih aktif di tempat lain.")
+            elif is_lokasi_terisi and not is_saya_di_sini: st.error("🔒 Terkunci.")
+            elif is_saya_di_sini: st.info("Toko sudah buka.")
             else:
                 st.write("📝 **Persiapan Buka Toko (Input Stok)**")
                 stok_input = {}
                 
-                # --- UPDATE: LOOPING PER KATEGORI (ACCORDION) ---
+                # --- INPUT STOK (ACCORDION) ---
                 for kategori, items in MENU_SEKARANG.items():
                     with st.expander(f"📦 Stok {kategori}", expanded=True):
                         cols = st.columns(2)
                         for i, (m, hrg) in enumerate(items.items()):
-                            # Key unik: kategori_nama
                             key_input = f"{kategori}_{m}"
                             with cols[i%2]: 
                                 val = st.number_input(f"{m}", min_value=0, value=0, key=f"stok_{key_input}")
-                                if val > 0:
-                                    stok_input[key_input] = val # Simpan dengan key unik
+                                if val > 0: stok_input[key_input] = val 
                 
                 st.write("---")
                 if st.button("🚀 BUKA SHIFT SEKARANG", key="btn_open"):
                     jam_skrg = get_wib_now().strftime("%H:%M")
                     list_stok_text = ""
-                    
-                    # Generate text telegram
                     for k_item, jml in stok_input.items():
-                        # k_item format: Kategori_NamaMenu
                         kat_split, nama_split = k_item.split('_', 1)
                         list_stok_text += f"\n📦 [{kat_split}] {nama_split}: {jml}"
-                        
-                    if not list_stok_text: list_stok_text = "\n(Tidak ada stok diinput)"
+                    if not list_stok_text: list_stok_text = "\n(Nihil)"
 
                     d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
                     db_gerobak[pilihan_gerobak] = d; save_json(FILE_DB_GEROBAK, db_gerobak)
                     
                     kirim_telegram(f"☀️ OPENING {pilihan_gerobak}\n👤 {user}\n⏰ {jam_skrg}\n\n**STOK AWAL:**{list_stok_text}")
-                    st.success("✅ Berhasil Buka!"); st.rerun()
+                    st.success("Buka!"); st.rerun()
 
         with t_cl:
             if not is_saya_di_sini:
@@ -453,10 +423,9 @@ def main():
                 st.write("📝 **Laporan Penjualan**")
                 omzet_total = 0; list_penjualan_temporary = [] 
                 
-                # --- UPDATE: LOOPING PER KATEGORI (ACCORDION) UNTUK CLOSING ---
+                # --- INPUT PENJUALAN (ACCORDION) ---
                 for kategori, items in MENU_SEKARANG.items():
-                    # Cek apakah ada stok di kategori ini agar expander tidak kosong
-                    # Tapi tetap tampilkan agar konsisten
+                    # Hanya tampilkan accordion jika ada stok di kategori ini (Optional, disini ditampilkan semua)
                     with st.expander(f"💰 Penjualan {kategori}", expanded=True):
                         for m, harga_satuan in items.items():
                             key_unik = f"{kategori}_{m}"
@@ -469,17 +438,12 @@ def main():
                                 omzet_total += omzet_item
                                 
                                 list_penjualan_temporary.append({
-                                    "KATEGORI": kategori,
-                                    "ITEM": m,
-                                    "HARGA": harga_satuan,
-                                    "TERJUAL": terjual,
-                                    "TIPE": "JUAL",
-                                    "GEROBAK": pilihan_gerobak
+                                    "KATEGORI": kategori, "ITEM": m, "HARGA": harga_satuan,
+                                    "TERJUAL": terjual, "TIPE": "JUAL", "GEROBAK": pilihan_gerobak
                                 })
-                            # Jika stok 0, tidak ditampilkan inputnya (Clean)
                 
                 st.write("---")
-                st.markdown(f"### 💰 Total: {format_rupiah(omzet_total)}")
+                st.markdown(f"### 💰 Total Penjualan: {format_rupiah(omzet_total)}")
                 
                 c1, c2 = st.columns(2)
                 uang_tunai = c1.number_input("Tunai", step=500, key="uang_tunai")
@@ -487,43 +451,40 @@ def main():
                 catatan = st.text_area("Catatan", key="catatan_closing")
                 
                 total_setor = uang_tunai + uang_qris
-                if (total_setor - omzet_total) != 0: 
-                    st.warning(f"⚠️ Selisih: {format_rupiah(total_setor - omzet_total)}")
-
-                st.write("---")
+                selisih = total_setor - omzet_total
                 
-                if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
-                    
-                    with st.spinner("Menyimpan Laporan..."):
-                        nama_file_excel = simpan_ke_excel_staff(
-                            list_penjualan_temporary, 
-                            user, 
-                            uang_tunai, 
-                            uang_qris, 
-                            total_setor, 
-                            catatan
-                        )
+                # --- LOGIKA VALIDASI: TOMBOL HANYA MUNCUL JIKA SELISIH 0 ---
+                if selisih == 0:
+                    st.success("✅ Nominal Pas! Silakan kirim laporan.")
+                    if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
                         
-                        rincian_text = ""
-                        # Urutkan text per kategori biar rapi
-                        for item in list_penjualan_temporary:
-                            if item['TERJUAL'] > 0:
-                                rincian_text += f"\n▫️ [{item['KATEGORI']}] {item['ITEM']}: {item['TERJUAL']}"
-                        if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
+                        with st.spinner("Memproses..."):
+                            nama_file_excel = simpan_ke_excel_staff(
+                                list_penjualan_temporary, user, uang_tunai, uang_qris, total_setor, catatan
+                            )
+                            
+                            rincian_text = ""
+                            for item in list_penjualan_temporary:
+                                if item['TERJUAL'] > 0:
+                                    rincian_text += f"\n▫️ [{item['KATEGORI']}] {item['ITEM']}: {item['TERJUAL']}"
+                            if not rincian_text: rincian_text = "\n(Nihil)"
 
-                        msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n"
-                               f"📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
-                               f"💵 **Tunai:** {format_rupiah(uang_tunai)}\n"
-                               f"💳 **QRIS:** {format_rupiah(uang_qris)}\n"
-                               f"💰 **Total Setor:** {format_rupiah(total_setor)}\n"
-                               f"📝 **Catatan:** {catatan}")
+                            msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n"
+                                   f"📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
+                                   f"💵 **Tunai:** {format_rupiah(uang_tunai)}\n"
+                                   f"💳 **QRIS:** {format_rupiah(uang_qris)}\n"
+                                   f"💰 **Total Setor:** {format_rupiah(total_setor)}\n"
+                                   f"📝 **Catatan:** {catatan}")
 
-                        kirim_telegram(msg)
+                            kirim_telegram(msg)
+                            
+                            if pilihan_gerobak in db_gerobak:
+                                del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
                         
-                        if pilihan_gerobak in db_gerobak:
-                            del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
-                    
-                    st.balloons(); st.success("Shift Berakhir."); st.rerun()
+                        st.balloons(); st.success("Selesai!"); st.rerun()
+                else:
+                    st.error(f"⚠️ **ADA SELISIH: {format_rupiah(selisih)}**")
+                    st.warning("Tombol kirim terkunci. Pastikan jumlah uang (Tunai + QRIS) SAMA PERSIS dengan Total Penjualan.")
 
     else: st.info("👈 Login di Menu Kiri")
 
