@@ -97,7 +97,7 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI EXCEL PER STAFF =================
+# ================= 4. FUNGSI EXCEL PER STAFF (FIX RUPIAH) =================
 def get_nama_file_excel(nama_staff):
     nama_clean = nama_staff.replace(" ", "_").upper()
     return f"LAPORAN_{nama_clean}.xlsx"
@@ -122,10 +122,13 @@ def rapikan_excel(filename):
                 try:
                     if cell.value and len(str(cell.value)) > max_len: max_len = len(str(cell.value))
                 except: pass
+                
                 header_text = ws[f"{col_letter}1"].value
-                # Format "Rp" di depan
+                # --- PERBAIKAN FORMAT RUPIAH DI SINI ---
                 if header_text and any(x in str(header_text).upper() for x in ['OMZET', 'HARGA', 'TUNAI', 'QRIS', 'TOTAL']):
+                    # Format Excel: "Rp" Spasi Angka (Rp #,##0)
                     cell.number_format = '"Rp" #,##0' 
+            
             ws.column_dimensions[col_letter].width = (max_len + 5)
         wb.save(filename)
     except: pass
@@ -160,21 +163,7 @@ def main():
     if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
     if 'user_pin' not in st.session_state: st.session_state['user_pin'] = None
 
-    # --- [FITUR BARU] AUTO-LOGIN DARI URL ---
-    # Jika halaman direload, cek apakah ada PIN di URL
-    if 'auth_pin' in st.query_params:
-        param_pin = st.query_params['auth_pin']
-        data_staff = load_json(FILE_DB_STAFF)
-        
-        # Cek Validitas PIN dari URL
-        if param_pin == PIN_OWNER:
-            st.session_state['user_nama'] = "OWNER"
-            st.session_state['user_pin'] = PIN_OWNER
-        elif param_pin in data_staff:
-            st.session_state['user_nama'] = data_staff[param_pin]
-            st.session_state['user_pin'] = param_pin
-
-    # --- SIDEBAR ---
+    # --- SIDEBAR LOGIN ---
     with st.sidebar:
         st.header("🔐 Akses Sistem")
         if st.session_state['user_nama'] is None:
@@ -184,35 +173,21 @@ def main():
                 if st.button("Masuk Sistem"):
                     data_staff = load_json(FILE_DB_STAFF)
                     if pin == PIN_OWNER:
-                        st.session_state['user_nama'] = "OWNER"
-                        st.session_state['user_pin'] = PIN_OWNER
-                        # SIMPAN PIN KE URL AGAR ANTI-RELOAD
-                        st.query_params['auth_pin'] = pin
-                        st.rerun()
+                        st.session_state['user_nama'] = "OWNER"; st.session_state['user_pin'] = PIN_OWNER; st.rerun()
                     elif pin in data_staff:
-                        st.session_state['user_nama'] = data_staff[pin]
-                        st.session_state['user_pin'] = pin
-                        # SIMPAN PIN KE URL AGAR ANTI-RELOAD
-                        st.query_params['auth_pin'] = pin
-                        st.rerun()
+                        st.session_state['user_nama'] = data_staff[pin]; st.session_state['user_pin'] = pin; st.rerun()
                     else: st.error("PIN Tidak Dikenal")
-            
             elif mode == "Daftar Staff Baru":
                 nm = st.text_input("Nama Lengkap")
                 pn = st.text_input("PIN (Angka)", max_chars=6)
                 if st.button("Daftarkan Staff"): 
-                    if not nm or not pn: st.error("Wajib diisi!")
+                    if not nm or not pn: st.error("Nama dan PIN wajib diisi!")
                     elif simpan_staff_baru(nm, pn): 
                         st.success(f"Staff {nm} Terdaftar!"); kirim_telegram(f"🆕 STAFF BARU: {nm} ({pn})")
                     else: st.error("PIN Sudah Dipakai")
         else:
             st.success(f"Halo, {st.session_state['user_nama']}")
-            if st.button("Keluar (Logout)"): 
-                st.session_state['user_nama'] = None
-                st.session_state['user_pin'] = None
-                # HAPUS PIN DARI URL SAAT LOGOUT
-                st.query_params.clear()
-                st.rerun()
+            if st.button("Keluar (Logout)"): st.session_state['user_nama']=None; st.rerun()
 
     # --- KONTEN UTAMA ---
     if st.session_state['user_nama']:
@@ -332,10 +307,11 @@ def main():
                     if tombol_buka:
                         jam_skrg = get_wib_now().strftime("%H:%M")
                         
-                        # --- GENERATE TEXT STOK AWAL ---
+                        # --- FITUR BARU: GENERATE TEXT STOK AWAL ---
                         list_stok_text = ""
                         for item, jml in stok_input.items():
-                            if jml > 0: list_stok_text += f"\n📦 {item}: {jml}"
+                            if jml > 0: # Hanya tampilkan yang ada stoknya
+                                list_stok_text += f"\n📦 {item}: {jml}"
                         if not list_stok_text: list_stok_text = "\n(Tidak ada stok diinput)"
 
                         # Simpan Data
@@ -343,7 +319,13 @@ def main():
                         db_gerobak[pilihan_gerobak] = d
                         save_json(FILE_DB_GEROBAK, db_gerobak)
                         
-                        kirim_telegram(f"☀️ OPENING {pilihan_gerobak}\n👤 {user}\n⏰ {jam_skrg}\n\n**STOK AWAL:**{list_stok_text}")
+                        # Kirim Telegram dengan Rincian Stok
+                        msg_open = (f"☀️ OPENING {pilihan_gerobak}\n"
+                                    f"👤 {user}\n"
+                                    f"⏰ {jam_skrg}\n\n"
+                                    f"**STOK AWAL:**{list_stok_text}")
+                        
+                        kirim_telegram(msg_open)
                         st.success("✅ Berhasil Buka!"); st.rerun()
 
         with t_cl:
@@ -392,7 +374,7 @@ def main():
                             
                             if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
 
-                            # 3. Kirim Telegram
+                            # 3. Kirim Telegram dengan Rincian
                             msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
                                    f"💰 **Omzet:** {format_rupiah(omzet_total)}\n"
                                    f"💵 **Setor:** {format_rupiah(total_setor)}\n"
@@ -411,4 +393,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-                
+        
