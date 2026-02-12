@@ -5,7 +5,7 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 
-# --- LIBRARY GOOGLE SHEET (Opsional biar ga error kalau belum install) ---
+# --- LIBRARY GOOGLE SHEET ---
 try:
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials
@@ -17,14 +17,16 @@ except ImportError:
 TOKEN_BOT = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4" 
 ID_OWNER  = "8505488457"  
 PIN_OWNER = "8888"
-NAMA_GOOGLE_SHEET = "Laporan_Gerobak_Apps" # Ganti sesuai nama Sheet Anda
+
+# 👇 NAMA SHEET HARUS SAMA PERSIS (HURUF BESAR/KECIL & SPASI)
+NAMA_GOOGLE_SHEET = "Penyimpanan data gerobak" 
 
 # ================= 2. DATABASE & FILE =================
 FILE_DB_GEROBAK = "database_gerobak.json" 
 FILE_DB_STAFF   = "database_staff.json"   
 FILE_DB_MENU    = "database_menu.json"    
 FILE_DB_LOKASI  = "database_lokasi.json"  
-FILE_DB_RIWAYAT = "database_riwayat.json" # Pengganti Excel (Sementara)
+FILE_DB_RIWAYAT = "database_riwayat.json" # Penampungan sementara
 
 # Data Default
 MENU_DEFAULT = {
@@ -94,70 +96,67 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI RIWAYAT & GOOGLE SHEET =================
+# ================= 4. FUNGSI UPLOAD GOOGLE SHEET (KOREKSI) =================
 
 def simpan_riwayat_lokal(data_list):
-    """
-    Menyimpan data transaksi ke JSON lokal (Pengganti sementara Excel).
-    Ini sangat cepat dan tidak bikin lag.
-    """
+    """Simpan sementara di laptop/server"""
     riwayat_lama = load_json(FILE_DB_RIWAYAT)
     if not isinstance(riwayat_lama, list): riwayat_lama = []
-    
-    # Gabungkan data baru
     riwayat_baru = riwayat_lama + data_list
     save_json(FILE_DB_RIWAYAT, riwayat_baru)
 
 def upload_ke_gsheet():
-    """
-    Fungsi Eksklusif Owner: Upload data dari JSON lokal ke Google Sheet
-    """
+    """Fungsi Upload dengan Pengecekan Error Detail"""
     if not HAS_GSHEET_LIB:
-        return False, "Library gspread belum terinstall. Cek terminal."
+        return False, "❌ Library 'gspread' belum terinstall."
     
     if not os.path.exists("credentials.json"):
-        return False, "File 'credentials.json' tidak ditemukan!"
+        return False, "❌ File 'credentials.json' hilang!"
 
     try:
-        # 1. Koneksi ke Google Sheet
+        # 1. Koneksi
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         client = gspread.authorize(creds)
-        sheet = client.open(NAMA_GOOGLE_SHEET).sheet1
         
-        # 2. Ambil Data Lokal
+        # 2. Cek Sheet Ada atau Tidak
+        try:
+            sheet = client.open(NAMA_GOOGLE_SHEET).sheet1
+        except gspread.SpreadsheetNotFound:
+            return False, f"❌ Google Sheet '{NAMA_GOOGLE_SHEET}' TIDAK DITEMUKAN!\nPastikan nama sama persis & sudah di-Share ke email Bot."
+
+        # 3. Ambil Data Lokal
         data_lokal = load_json(FILE_DB_RIWAYAT)
         if not data_lokal:
-            return False, "Tidak ada data baru untuk di-upload."
+            return False, "⚠️ Tidak ada data baru untuk di-upload."
 
-        # 3. Siapkan Data untuk Upload (Convert dict to list values)
-        # Ambil header dari data pertama jika sheet kosong
-        try:
-            existing_data = sheet.get_all_values()
-            is_empty = len(existing_data) == 0
-        except: is_empty = True
+        # 4. Format Data (Dict to List)
+        # Cek apakah sheet kosong? Jika ya, tambah Header dulu
+        existing_data = sheet.get_all_values()
+        is_empty = len(existing_data) == 0
 
         rows_to_upload = []
+        # Ambil keys dari data pertama sebagai Header
         if is_empty and len(data_lokal) > 0:
             header = list(data_lokal[0].keys())
-            rows_to_upload.append(header) # Tambah header jika sheet baru
+            rows_to_upload.append(header)
 
         for entry in data_lokal:
+            # Pastikan urutan values sesuai header (jika struktur json konsisten)
             rows_to_upload.append(list(entry.values()))
 
-        # 4. Push ke Sheet
+        # 5. Push Data
         sheet.append_rows(rows_to_upload)
 
-        # 5. Bersihkan Data Lokal setelah sukses upload (Opsional, agar tidak duplikat)
-        # Kita kosongkan file riwayat lokal karena sudah pindah ke cloud
+        # 6. Bersihkan Lokal
         save_json(FILE_DB_RIWAYAT, [])
         
-        return True, f"Berhasil upload {len(data_lokal)} data transaksi!"
+        return True, f"✅ Sukses! {len(data_lokal)} data masuk ke Sheet '{NAMA_GOOGLE_SHEET}'."
 
     except Exception as e:
-        return False, f"Gagal Upload: {str(e)}"
+        return False, f"❌ Error Sistem: {str(e)}"
 
-# ================= 5. TAMPILAN APLIKASI UTAMA =================
+# ================= 5. TAMPILAN APLIKASI =================
 def main():
     st.set_page_config(page_title="Sistem Gerobak Pro", page_icon="🏪", layout="centered")
     
@@ -189,13 +188,13 @@ def main():
                 nm = st.text_input("Nama Lengkap")
                 pn = st.text_input("PIN (Angka)", max_chars=6)
                 if st.button("Daftarkan Staff"): 
-                    if not nm or not pn: st.error("Nama dan PIN wajib diisi!")
+                    if not nm or not pn: st.error("Wajib diisi!")
                     elif simpan_staff_baru(nm, pn): 
                         st.success(f"Staff {nm} Terdaftar!"); kirim_telegram(f"🆕 STAFF BARU: {nm} ({pn})")
                     else: st.error("PIN Sudah Dipakai")
         else:
             st.success(f"Halo, {st.session_state['user_nama']}")
-            if st.button("Keluar (Logout)"): st.session_state['user_nama']=None; st.rerun()
+            if st.button("Keluar"): st.session_state['user_nama']=None; st.rerun()
 
     # --- KONTEN UTAMA ---
     if st.session_state['user_nama']:
@@ -218,23 +217,20 @@ def main():
             t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "☁️ Google Sheet"])
             
             with t1: 
-                st.write("**Status Gerobak:**")
                 if not db_gerobak: st.caption("Semua gerobak tutup.")
                 for id_lok, nama_lok in LOKASI_SEKARANG.items():
                     info = db_gerobak.get(nama_lok)
                     status_icon = "🟢 TUTUP" if not info else "🔴 BUKA"
                     with st.expander(f"{status_icon} - {nama_lok}", expanded=bool(info)):
                         if info:
-                            st.write(f"👤 **Penjaga:** {info['pic']}")
-                            st.write(f"⏰ **Buka:** {info['jam_masuk']}")
+                            st.write(f"👤 {info['pic']} | ⏰ {info['jam_masuk']}")
                             if st.button(f"⛔ PAKSA TUTUP / RESET {nama_lok}", key=f"kick_{id_lok}"):
                                 del db_gerobak[nama_lok]; save_json(FILE_DB_GEROBAK, db_gerobak); st.rerun()
-                        else: st.write("Kosong.")
             
             with t2: 
                 st.dataframe(pd.DataFrame(list(ds.items()), columns=['PIN','NAMA']), hide_index=True, use_container_width=True)
                 if ds:
-                    pilih = st.selectbox("Pilih Staff Hapus:", [f"{v} ({k})" for k,v in ds.items()])
+                    pilih = st.selectbox("Hapus:", [f"{v} ({k})" for k,v in ds.items()])
                     if st.button("Hapus Staff"): hapus_staff(pilih.split('(')[1][:-1]); st.rerun()
 
             with t3: 
@@ -245,10 +241,10 @@ def main():
                 if st.button("Simpan Menu") and nm_menu: simpan_menu_baru(nm_menu, hg_menu); st.rerun()
                 if MENU_SEKARANG:
                     del_m = st.selectbox("Hapus Menu:", list(MENU_SEKARANG.keys()))
-                    if st.button("Hapus Menu Terpilih"): hapus_menu(del_m); st.rerun()
+                    if st.button("Hapus Menu"): hapus_menu(del_m); st.rerun()
 
             with t4: 
-                st.dataframe(pd.DataFrame(list(LOKASI_SEKARANG.items()), columns=['ID','Nama Cabang']), hide_index=True, use_container_width=True)
+                st.dataframe(pd.DataFrame(list(LOKASI_SEKARANG.items()), columns=['ID','Nama']), hide_index=True, use_container_width=True)
                 c_l1, c_l2 = st.columns([1,3])
                 ids = [int(k) for k in LOKASI_SEKARANG.keys()]
                 next_id = str(max(ids) + 1) if ids else "1"
@@ -259,28 +255,26 @@ def main():
                     if st.button("Hapus Cabang"): hapus_lokasi(del_lok.split(' - ')[0]); st.rerun()
 
             with t5: 
-                st.subheader("Simpan Data ke Google Sheet")
-                st.write(f"Saat ini ada **{len(riwayat_pending)}** data transaksi yang belum disimpan ke Google Sheet.")
+                st.subheader("Cloud Sync (Google Sheet)")
+                st.caption(f"Target Sheet: **{NAMA_GOOGLE_SHEET}**")
                 
                 if len(riwayat_pending) > 0:
-                    st.warning("⚠️ Data ini masih di laptop/server. Klik tombol di bawah untuk mengamankannya ke Google Sheet.")
-                    if st.button("☁️ UPLOAD SEKARANG KE GOOGLE SHEET"):
-                        with st.spinner("Sedang menghubungkan ke Google..."):
+                    st.info(f"Ada **{len(riwayat_pending)}** data baru belum di-upload.")
+                    if st.button("☁️ UPLOAD SEKARANG"):
+                        with st.spinner("Menghubungkan ke Google..."):
                             sukses, pesan = upload_ke_gsheet()
                             if sukses:
-                                st.success(pesan)
-                                st.balloons()
-                                st.rerun()
+                                st.success(pesan); st.balloons(); st.rerun()
                             else:
                                 st.error(pesan)
                 else:
-                    st.success("✅ Semua data aman! Belum ada transaksi baru.")
+                    st.success("✅ Data Aman. Tidak ada pending upload.")
             st.divider()
 
         # ================= FITUR STAFF =================
-        if not LOKASI_SEKARANG: st.error("Database Kosong"); st.stop()
+        if not LOKASI_SEKARANG: st.error("Lokasi Kosong"); st.stop()
 
-        st.subheader("📍 Pilih Lokasi Kerja")
+        st.subheader("📍 Pilih Lokasi")
         pilihan_gerobak = st.selectbox("Lokasi Anda:", list(LOKASI_SEKARANG.values()))
         
         db_gerobak = load_json(FILE_DB_GEROBAK)
@@ -295,8 +289,8 @@ def main():
 
         if is_lokasi_terisi:
             if is_saya_di_sini: st.success(f"✅ ANDA SEDANG AKTIF DI SINI ({pilihan_gerobak})")
-            else: st.error(f"⛔ LOKASI INI DIPAKAI OLEH: {shift_aktif_di_lokasi['pic']}")
-        else: st.info("🟢 Lokasi Kosong. Siap Buka Shift.")
+            else: st.error(f"⛔ DIPAKAI OLEH: {shift_aktif_di_lokasi['pic']}")
+        else: st.info("🟢 Siap Buka.")
 
         t_op, t_cl = st.tabs(["☀️ BUKA TOKO", "🌙 TUTUP TOKO"])
 
@@ -304,9 +298,9 @@ def main():
             if lokasi_lain_user:
                 st.error("❌ AKSES DITOLAK"); st.warning(f"Anda masih aktif di **{lokasi_lain_user}**. Tutup dulu disana.")
             elif is_lokasi_terisi and not is_saya_di_sini:
-                st.error(f"🔒 Gerobak dipakai {shift_aktif_di_lokasi['pic']}.")
+                st.error("🔒 Gerobak dipakai orang lain.")
             elif is_saya_di_sini:
-                st.info("Toko sudah buka. Klik tab 'TUTUP TOKO' jika ingin pulang.")
+                st.info("Toko sudah buka.")
             else:
                 st.write("📝 **Persiapan Buka Toko**")
                 with st.form("form_buka_toko"):
@@ -314,20 +308,15 @@ def main():
                     for i, m in enumerate(MENU_SEKARANG):
                         with cols[i%2]: stok_input[m] = st.number_input(f"Stok {m}", min_value=0, value=0)
                     
-                    tombol_buka = st.form_submit_button("🚀 BUKA SHIFT SEKARANG")
-                    
-                    if tombol_buka:
+                    if st.form_submit_button("🚀 BUKA SHIFT"):
                         jam_skrg = get_wib_now().strftime("%H:%M")
-                        
-                        # Generate Text Stok untuk Telegram
                         list_stok_text = ""
                         for item, jml in stok_input.items():
                             if jml > 0: list_stok_text += f"\n📦 {item}: {jml}"
-                        if not list_stok_text: list_stok_text = "\n(Tidak ada stok diinput)"
+                        if not list_stok_text: list_stok_text = "\n(Nihil)"
 
                         d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
-                        db_gerobak[pilihan_gerobak] = d
-                        save_json(FILE_DB_GEROBAK, db_gerobak)
+                        db_gerobak[pilihan_gerobak] = d; save_json(FILE_DB_GEROBAK, db_gerobak)
                         
                         kirim_telegram(f"☀️ *OPENING {pilihan_gerobak}*\n👤 {user}\n⏰ {jam_skrg}\n\n*STOK AWAL:*{list_stok_text}")
                         st.success("✅ Berhasil Buka!"); st.rerun()
@@ -359,39 +348,30 @@ def main():
                     
                     if (total_setor - omzet_total) != 0: st.warning(f"⚠️ Selisih: {format_rupiah(total_setor - omzet_total)}")
 
-                    tombol_tutup = st.form_submit_button("🔒 TUTUP SHIFT & KIRIM")
-                    if tombol_tutup:
-                        # Tambah baris setoran ke list
+                    if st.form_submit_button("🔒 TUTUP SHIFT & KIRIM"):
                         list_transaksi.append({
                             "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
                             "ITEM": "SETORAN", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": total_setor, "TIPE": "SETORAN", "CATATAN": catatan
                         })
                         
-                        # 1. Simpan ke Riwayat Lokal (Sangat Cepat)
-                        simpan_riwayat_lokal(list_transaksi)
+                        simpan_riwayat_lokal(list_transaksi) # Simpan Lokal Dulu
                         
-                        # 2. Kirim Rincian Telegram (Hanya Text)
                         rincian_text = ""
                         for item in list_transaksi:
-                            if item['TIPE'] == 'JUAL' and item['TERJUAL'] > 0:
-                                rincian_text += f"\n▫️ {item['ITEM']}: {item['TERJUAL']}"
-                        if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
+                            if item['TIPE'] == 'JUAL' and item['TERJUAL'] > 0: rincian_text += f"\n▫️ {item['ITEM']}: {item['TERJUAL']}"
+                        if not rincian_text: rincian_text = "\n(Nihil)"
 
                         msg = (f"🌙 *CLOSING {pilihan_gerobak}*\n👤 {user}\n\n📊 *RINCIAN TERJUAL:*{rincian_text}\n\n"
-                               f"💰 *Omzet:* {format_rupiah(omzet_total)}\n"
-                               f"💵 *Setor:* {format_rupiah(total_setor)}\n"
-                               f"📝 *Catatan:* {catatan}")
+                               f"💰 *Omzet:* {format_rupiah(omzet_total)}\n💵 *Setor:* {format_rupiah(total_setor)}\n📝 *Catatan:* {catatan}")
                         
                         kirim_telegram(msg)
                         
-                        # 3. Hapus Sesi
                         if pilihan_gerobak in db_gerobak:
                             del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
                         
-                        st.balloons(); st.success("Shift Berakhir. Data tersimpan di antrian upload."); st.rerun()
-
+                        st.balloons(); st.success("Shift Selesai."); st.rerun()
     else: st.info("👈 Login di Menu Kiri")
 
 if __name__ == "__main__":
     main()
-    
+        
