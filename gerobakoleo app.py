@@ -299,11 +299,30 @@ def main():
                         with cols[i%2]: stok_input[m] = st.number_input(f"Stok {m}", min_value=0, value=0)
                     
                     tombol_buka = st.form_submit_button("🚀 BUKA SHIFT SEKARANG")
+                    
                     if tombol_buka:
                         jam_skrg = get_wib_now().strftime("%H:%M")
+                        
+                        # --- FITUR BARU: GENERATE TEXT STOK AWAL ---
+                        list_stok_text = ""
+                        for item, jml in stok_input.items():
+                            if jml > 0: # Hanya tampilkan yang ada stoknya
+                                list_stok_text += f"\n📦 {item}: {jml}"
+                        if not list_stok_text: list_stok_text = "\n(Tidak ada stok diinput)"
+
+                        # Simpan Data
                         d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
-                        db_gerobak[pilihan_gerobak] = d; save_json(FILE_DB_GEROBAK, db_gerobak)
-                        kirim_telegram(f"☀️ OPENING {pilihan_gerobak}\n👤 {user}\n⏰ {jam_skrg}"); st.success("✅ Berhasil Buka!"); st.rerun()
+                        db_gerobak[pilihan_gerobak] = d
+                        save_json(FILE_DB_GEROBAK, db_gerobak)
+                        
+                        # Kirim Telegram dengan Rincian Stok
+                        msg_open = (f"☀️ OPENING {pilihan_gerobak}\n"
+                                    f"👤 {user}\n"
+                                    f"⏰ {jam_skrg}\n\n"
+                                    f"**STOK AWAL:**{list_stok_text}")
+                        
+                        kirim_telegram(msg_open)
+                        st.success("✅ Berhasil Buka!"); st.rerun()
 
         with t_cl:
             if not is_saya_di_sini:
@@ -370,4 +389,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-                        
+    
