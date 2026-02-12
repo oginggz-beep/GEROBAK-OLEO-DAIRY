@@ -43,7 +43,6 @@ def kirim_telegram(pesan):
         requests.post(url, data={"chat_id": ID_OWNER, "text": pesan}, timeout=3)
     except: pass
 
-# Fungsi ini tetap ada tapi tidak dipanggil otomatis saat closing (sesuai request)
 def kirim_file_excel_telegram(filename_target):
     if "PASTE_TOKEN" in TOKEN_BOT: return
     if os.path.exists(filename_target):
@@ -98,7 +97,7 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI EXCEL PER STAFF (FORMAT RUPIAH DI DEPAN) =================
+# ================= 4. FUNGSI EXCEL PER STAFF (FORMAT KOLOM BARU) =================
 def get_nama_file_excel(nama_staff):
     nama_clean = nama_staff.replace(" ", "_").upper()
     return f"LAPORAN_{nama_clean}.xlsx"
@@ -113,20 +112,29 @@ def rapikan_excel(filename):
         center = Alignment(horizontal="center", vertical="center")
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
         
+        # Format Header
         for cell in ws[1]:
             cell.font = header_font; cell.fill = header_fill; cell.alignment = center; cell.border = thin_border
 
+        # Format Kolom
         for col in ws.columns:
             max_len = 0
             col_letter = col[0].column_letter
             header_cell = ws[f"{col_letter}1"]
             header_text = str(header_cell.value).upper() if header_cell.value else ""
             
-            is_currency = any(x in header_text for x in ['OMZET', 'HARGA', 'TUNAI', 'QRIS', 'TOTAL'])
+            # Kolom yang isinya Uang
+            is_currency = any(x in header_text for x in ['CASH', 'QRIS', 'TOTAL', 'HARGA'])
 
             for cell in col:
                 cell.border = thin_border
-                if is_currency and cell.row > 1: cell.number_format = '"Rp" #,##0' 
+                if is_currency and cell.row > 1: 
+                    try:
+                        # Pastikan value adalah angka sebelum diformat
+                        if isinstance(cell.value, (int, float)):
+                            cell.number_format = '"Rp" #,##0' 
+                    except: pass
+                
                 try:
                     if cell.value and len(str(cell.value)) > max_len: max_len = len(str(cell.value))
                 except: pass
@@ -141,6 +149,12 @@ def simpan_ke_excel_staff(data_rows, nama_staff):
         nama_file = get_nama_file_excel(nama_staff)
         df_baru = pd.DataFrame(data_rows)
         
+        # Susun ulang urutan kolom agar sesuai permintaan
+        kolom_diinginkan = ["TANGGAL", "NAMA", "GEROBAK", "MENU", "TERJUAL", "CASH", "QRIS", "TOTAL", "CATATAN"]
+        # Filter hanya kolom yang ada (jaga-jaga error)
+        kolom_final = [k for k in kolom_diinginkan if k in df_baru.columns]
+        df_baru = df_baru[kolom_final]
+
         if os.path.exists(nama_file):
             df_lama = pd.read_excel(nama_file)
             df_final = pd.concat([df_lama, df_baru], ignore_index=True)
@@ -345,22 +359,22 @@ def main():
                 omzet_total = 0; list_transaksi = []
                 st.write("---")
                 
+                # Loop untuk Input Sisa
                 for m, harga_satuan in MENU_SEKARANG.items():
                     stok_awal = int(shift_aktif_di_lokasi['stok'].get(m, 0))
+                    # Hanya tampilkan jika stok awal > 0 (sesuai request sebelumnya)
                     if stok_awal > 0:
                         sisa = st.number_input(f"Sisa {m} (Awal: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{m}")
                         terjual = stok_awal - sisa
                         omzet_item = terjual * harga_satuan
                         omzet_total += omzet_item
+                        
+                        # Simpan data sementara (belum termasuk cash/qris)
                         list_transaksi.append({
-                            "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
-                            "ITEM": m, "HARGA": harga_satuan, "AWAL": stok_awal, "SISA": sisa, 
-                            "TERJUAL": terjual, "OMZET": omzet_item, "TIPE": "JUAL"
-                        })
-                    else:
-                        list_transaksi.append({
-                            "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
-                            "ITEM": m, "HARGA": harga_satuan, "AWAL": 0, "SISA": 0, "TERJUAL": 0, "OMZET": 0, "TIPE": "JUAL"
+                            "MENU": m, 
+                            "HARGA": harga_satuan, 
+                            "TERJUAL": terjual,
+                            "OMZET": omzet_item
                         })
                 
                 st.write("---")
@@ -378,26 +392,52 @@ def main():
                 st.write("---")
                 
                 if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
-                    # Pisahkan Tunai dan QRIS di Excel
-                    list_transaksi.append({
-                        "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
-                        "ITEM": "SETORAN TUNAI", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": uang_tunai, "TIPE": "SETORAN", "CATATAN": catatan
-                    })
-                    list_transaksi.append({
-                        "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
-                        "ITEM": "SETORAN QRIS", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": uang_qris, "TIPE": "SETORAN", "CATATAN": ""
-                    })
                     
+                    # --- REKONSTRUKSI DATA UNTUK EXCEL ---
+                    # Kita buat daftar baru yang sudah include CASH, QRIS, TOTAL di setiap baris
+                    final_data_excel = []
+                    
+                    if not list_transaksi: # Jika tidak ada barang terjual
+                         final_data_excel.append({
+                            "TANGGAL": get_wib_now().strftime("%Y-%m-%d"),
+                            "NAMA": user,
+                            "GEROBAK": pilihan_gerobak,
+                            "MENU": "TIDAK ADA PENJUALAN",
+                            "TERJUAL": 0,
+                            "CASH": uang_tunai,
+                            "QRIS": uang_qris,
+                            "TOTAL": total_setor,
+                            "CATATAN": catatan
+                        })
+                    else:
+                        for item in list_transaksi:
+                            # Format Nama Menu + Harga: "Fresh Milk (8000)"
+                            menu_display = f"{item['MENU']} ({int(item['HARGA'])})"
+                            
+                            final_data_excel.append({
+                                "TANGGAL": get_wib_now().strftime("%Y-%m-%d"),
+                                "NAMA": user,
+                                "GEROBAK": pilihan_gerobak,
+                                "MENU": menu_display,
+                                "TERJUAL": item['TERJUAL'],
+                                "CASH": uang_tunai, # Isi di setiap baris
+                                "QRIS": uang_qris,  # Isi di setiap baris
+                                "TOTAL": total_setor, # Isi di setiap baris
+                                "CATATAN": catatan
+                            })
+
                     with st.spinner("Menyimpan Laporan..."):
-                        nama_file_excel = simpan_ke_excel_staff(list_transaksi, user)
+                        # Simpan ke Excel
+                        nama_file_excel = simpan_ke_excel_staff(final_data_excel, user)
                         
+                        # Generate Text untuk Telegram
                         rincian_text = ""
                         for item in list_transaksi:
-                            if item['TIPE'] == 'JUAL' and item['TERJUAL'] > 0:
-                                rincian_text += f"\n▫️ {item['ITEM']}: {item['TERJUAL']}"
+                            if item['TERJUAL'] > 0:
+                                rincian_text += f"\n▫️ {item['MENU']}: {item['TERJUAL']}"
+                        
                         if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
 
-                        # Laporan Telegram (TANPA KIRIM FILE EXCEL)
                         msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n"
                                f"📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
                                f"💵 **Tunai:** {format_rupiah(uang_tunai)}\n"
@@ -405,11 +445,10 @@ def main():
                                f"💰 **Total Setor:** {format_rupiah(total_setor)}\n"
                                f"📝 **Catatan:** {catatan}")
 
-                        # Perintah kirim file dimatikan (sesuai request)
-                        # if nama_file_excel: kirim_file_excel_telegram(nama_file_excel) 
-                        
+                        # Kirim Telegram Text (Tanpa File)
                         kirim_telegram(msg)
                         
+                        # Hapus Sesi
                         if pilihan_gerobak in db_gerobak:
                             del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
                     
