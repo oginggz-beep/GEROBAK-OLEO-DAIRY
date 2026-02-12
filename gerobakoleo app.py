@@ -20,13 +20,13 @@ FILE_DB_LOKASI  = "database_lokasi.json"
 
 # Data Default
 MENU_DEFAULT = {
-    "Strawberry Milk": 10000, "Coklat Milk": 12000,
-    "Kopi Susu Aren": 15000, "Matcha Latte": 15000
+    "Fresh Milk": 8000, "Coklat Milk": 10000,
+    "Strawberry Milk": 10000, "Vanilla Milk": 10000
 }
 LOKASI_DEFAULT = {
-    "1": "Gerobak Alun-Alun", 
-    "2": "Gerobak Stasiun", 
-    "3": "Gerobak Pasar"
+    "1": "Gerobak 1", 
+    "2": "Gerobak 2", 
+    "3": "Gerobak 3"
 }
 
 # ================= 3. FUNGSI BANTUAN =================
