@@ -348,7 +348,7 @@ def main():
                 with st.expander("🔴 Buka Menu Reset"):
                     password_reset = st.text_input("Masukkan Password Reset:", type="password")
                     
-                    if st.button("🔥 HAPUS PERMANEN SEMUA DATA"):
+                    if st.button("🔥 PIKIA-PIKIA BANA LUU"):
                         if password_reset == PASSWORD_RESET: # Cek Password ciroclistopel
                             try:
                                 # Hapus DB JSON
