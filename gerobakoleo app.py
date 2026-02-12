@@ -123,10 +123,13 @@ def rapikan_excel(filename):
             col_letter = col[0].column_letter
             header_cell = ws[f"{col_letter}1"]
             header_text = str(header_cell.value).upper() if header_cell.value else ""
+            
+            # Deteksi kolom duit
             is_currency = any(x in header_text for x in ['OMZET', 'HARGA', 'TUNAI', 'QRIS', 'TOTAL'])
 
             for cell in col:
                 cell.border = thin_border
+                # Format Rupiah di Depan
                 if is_currency and cell.row > 1: cell.number_format = '"Rp" #,##0' 
                 try:
                     if cell.value and len(str(cell.value)) > max_len: max_len = len(str(cell.value))
@@ -252,7 +255,6 @@ def main():
                 
                 st.write("---")
                 st.write("**Tambah Gerobak Baru**")
-                
                 c_l1, c_l2 = st.columns([1,3])
                 ids = [int(k) for k in LOKASI_SEKARANG.keys()]
                 next_id = str(max(ids) + 1) if ids else "1"
@@ -265,10 +267,8 @@ def main():
                     if input_nama and input_lokasi:
                         nama_lengkap = f"{input_nama} - {input_lokasi}"
                         simpan_lokasi_baru(input_id, nama_lengkap)
-                        st.success(f"Berhasil: {nama_lengkap}")
-                        st.rerun()
-                    else:
-                        st.error("Nama Gerobak dan Lokasi wajib diisi!")
+                        st.success(f"Berhasil: {nama_lengkap}"); st.rerun()
+                    else: st.error("Nama Gerobak dan Lokasi wajib diisi!")
 
                 if LOKASI_SEKARANG:
                     st.write("---")
@@ -286,8 +286,7 @@ def main():
                         st.success(f"File ditemukan: {file_target}")
                         with open(file_target, "rb") as file:
                             st.download_button(label=f"📥 Download Excel {pilih_staff_dl}", data=file, file_name=file_target, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    else:
-                        st.warning(f"Belum ada laporan dari staff: {pilih_staff_dl}")
+                    else: st.warning(f"Belum ada laporan dari staff: {pilih_staff_dl}")
                 else: st.warning("Belum ada data staff.")
             st.divider()
 
@@ -308,12 +307,9 @@ def main():
             if data_g['pin_pic'] == pin and nama_g != pilihan_gerobak: lokasi_lain_user = nama_g; break
 
         if is_lokasi_terisi:
-            if is_saya_di_sini: 
-                st.success(f"✅ ANDA SEDANG AKTIF DI: {pilihan_gerobak}")
-            else: 
-                st.error(f"⛔ {pilihan_gerobak} SEDANG DIPAKAI: {shift_aktif_di_lokasi['pic']}")
-        else: 
-            st.info(f"🟢 {pilihan_gerobak} Kosong. Siap Buka Shift.")
+            if is_saya_di_sini: st.success(f"✅ ANDA SEDANG AKTIF DI: {pilihan_gerobak}")
+            else: st.error(f"⛔ {pilihan_gerobak} SEDANG DIPAKAI: {shift_aktif_di_lokasi['pic']}")
+        else: st.info(f"🟢 {pilihan_gerobak} Kosong. Siap Buka Shift.")
 
         t_op, t_cl = st.tabs(["☀️ BUKA TOKO", "🌙 TUTUP TOKO"])
 
@@ -326,25 +322,20 @@ def main():
                 st.info("Toko sudah buka. Klik tab 'TUTUP TOKO' jika ingin pulang.")
             else:
                 st.write("📝 **Persiapan Buka Toko**")
-                
-                # --- SOLUSI ANTI ENTER ---
                 stok_input = {}; cols = st.columns(2)
                 for i, m in enumerate(MENU_SEKARANG):
-                    with cols[i%2]: 
-                        stok_input[m] = st.number_input(f"Stok {m}", min_value=0, value=0)
+                    with cols[i%2]: stok_input[m] = st.number_input(f"Stok {m}", min_value=0, value=0)
                 
                 st.write("---")
                 if st.button("🚀 BUKA SHIFT SEKARANG", key="btn_open"):
                     jam_skrg = get_wib_now().strftime("%H:%M")
-                    
                     list_stok_text = ""
                     for item, jml in stok_input.items():
                         if jml > 0: list_stok_text += f"\n📦 {item}: {jml}"
                     if not list_stok_text: list_stok_text = "\n(Tidak ada stok diinput)"
 
                     d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
-                    db_gerobak[pilihan_gerobak] = d
-                    save_json(FILE_DB_GEROBAK, db_gerobak)
+                    db_gerobak[pilihan_gerobak] = d; save_json(FILE_DB_GEROBAK, db_gerobak)
                     
                     kirim_telegram(f"☀️ OPENING {pilihan_gerobak}\n👤 {user}\n⏰ {jam_skrg}\n\n**STOK AWAL:**{list_stok_text}")
                     st.success("✅ Berhasil Buka!"); st.rerun()
@@ -355,32 +346,25 @@ def main():
                 else: st.info("Toko belum dibuka.")
             else:
                 st.write("📝 **Laporan Penjualan**")
-                
                 omzet_total = 0; list_transaksi = []
                 st.write("---")
                 
-                # --- UPDATE LOGIKA: HANYA TAMPILKAN JIKA STOK AWAL > 0 ---
                 for m, harga_satuan in MENU_SEKARANG.items():
                     stok_awal = int(shift_aktif_di_lokasi['stok'].get(m, 0))
-                    
                     if stok_awal > 0:
-                        # TAMPILKAN INPUT
                         sisa = st.number_input(f"Sisa {m} (Awal: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{m}")
                         terjual = stok_awal - sisa
                         omzet_item = terjual * harga_satuan
                         omzet_total += omzet_item
-                        
                         list_transaksi.append({
                             "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
                             "ITEM": m, "HARGA": harga_satuan, "AWAL": stok_awal, "SISA": sisa, 
                             "TERJUAL": terjual, "OMZET": omzet_item, "TIPE": "JUAL"
                         })
                     else:
-                        # STOK 0 - SEMBUNYIKAN TAPI CATAT KE SISTEM (Agar Data Excel Rapi)
                         list_transaksi.append({
                             "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
-                            "ITEM": m, "HARGA": harga_satuan, "AWAL": 0, "SISA": 0, 
-                            "TERJUAL": 0, "OMZET": 0, "TIPE": "JUAL"
+                            "ITEM": m, "HARGA": harga_satuan, "AWAL": 0, "SISA": 0, "TERJUAL": 0, "OMZET": 0, "TIPE": "JUAL"
                         })
                 
                 st.write("---")
@@ -398,9 +382,14 @@ def main():
                 st.write("---")
                 
                 if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
+                    # --- UPDATE: PISAHKAN TUNAI DAN QRIS DI EXCEL ---
                     list_transaksi.append({
                         "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
-                        "ITEM": "SETORAN", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": total_setor, "TIPE": "SETORAN", "CATATAN": catatan
+                        "ITEM": "SETORAN TUNAI", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": uang_tunai, "TIPE": "SETORAN", "CATATAN": catatan
+                    })
+                    list_transaksi.append({
+                        "TANGGAL": get_wib_now().strftime("%Y-%m-%d"), "GEROBAK": pilihan_gerobak, "STAFF": user, 
+                        "ITEM": "SETORAN QRIS", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": uang_qris, "TIPE": "SETORAN", "CATATAN": ""
                     })
                     
                     with st.spinner("Menyimpan Laporan..."):
@@ -410,12 +399,14 @@ def main():
                         for item in list_transaksi:
                             if item['TIPE'] == 'JUAL' and item['TERJUAL'] > 0:
                                 rincian_text += f"\n▫️ {item['ITEM']}: {item['TERJUAL']}"
-                        
                         if not rincian_text: rincian_text = "\n(Tidak ada item terjual)"
 
-                        msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
-                               f"💰 **Omzet:** {format_rupiah(omzet_total)}\n"
-                               f"💵 **Setor:** {format_rupiah(total_setor)}\n"
+                        # --- UPDATE: LAPORAN TELEGRAM RINCI ---
+                        msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n"
+                               f"📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
+                               f"💵 **Tunai:** {format_rupiah(uang_tunai)}\n"
+                               f"💳 **QRIS:** {format_rupiah(uang_qris)}\n"
+                               f"💰 **Total Setor:** {format_rupiah(total_setor)}\n"
                                f"📝 **Catatan:** {catatan}")
 
                         if nama_file_excel: kirim_file_excel_telegram(nama_file_excel)
@@ -430,4 +421,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-                    
