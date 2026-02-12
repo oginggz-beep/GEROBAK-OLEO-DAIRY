@@ -23,24 +23,35 @@ FILE_DB_LOKASI  = "database_lokasi.json"
 # --- DATA DEFAULT (3 KATEGORI) ---
 MENU_DEFAULT = {
     "Regular (Cup)": {
-        "Strawkuccciberry Milk": 10000, 
-        "Coklat Milk": 12000,
-        "Kopi Susu Aren": 15000
+        "Fresh Milk": 8000, 
+        "Coklat Milk": 10000,
+        "Strawberry Milk": 10000,
+        "Vanilla Milk": 10000,
+        "Mango Milk": 10000,
+        "Melon Milk": 10000
     },
     "Botol 250ml": {
+        "Fresh Milk": 10000, 
+        "Coklat Milk": 15000,
         "Strawberry Milk": 15000,
-        "Coklat Milk": 17000
+        "Vanilla Milk": 15000,
+        "Mango Milk": 15000,
+        "Melon Milk": 15000
     },
     "Botol 1 Liter": {
-        "Strawberry Milk": 50000,
-        "Kopi Literan": 65000
+        "Plastic Edition": 20000, 
+        "Coklat Milk": 45000,
+        "Strawberry Milk": 45000,
+        "Vanilla Milk": 45000,
+        "Mango Milk": 45000,
+        "Melon Milk": 45000
     }
 }
 
 LOKASI_DEFAULT = {
-    "1": "Gerobak 01 - Alun-Alun", 
-    "2": "Gerobak 02 - Stasiun Kota", 
-    "3": "Gerobak 03 - Kampus Unand"
+    "1": "Gerobak 01 - SD Kartika", 
+    "2": "Gerobak 02 - belum ada", 
+    "3": "Gerobak 03 - belum ada"
 }
 
 # ================= 3. FUNGSI BANTUAN =================
@@ -252,7 +263,7 @@ def main():
             c2.metric("Total Staff", f"{len(ds)}")
             c3.metric("Total Menu", f"{total_menu}")
             
-            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "📥 Reset"])
+            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "📥 Laporan"])
             
             with t1: 
                 if not db_gerobak: st.caption("Semua gerobak tutup.")
@@ -455,7 +466,7 @@ def main():
                 
                 # --- LOGIKA VALIDASI: TOMBOL HANYA MUNCUL JIKA SELISIH 0 ---
                 if selisih == 0:
-                    st.success("✅ Nominal Pas! Silakan kirim laporan.")
+                    st.success("✅ Uang Pas! Mantaaaaaaaaaaaaaap.")
                     if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
                         
                         with st.spinner("Memproses..."):
@@ -486,7 +497,7 @@ def main():
                     st.error(f"⚠️ **ADA SELISIH: {format_rupiah(selisih)}**")
                     st.warning("Tombol kirim terkunci. Pastikan jumlah uang (Tunai + QRIS) SAMA PERSIS dengan Total Penjualan.")
 
-    else: st.info("👈 Login di Menu Kiri")
+    else: st.info("👈 Login ada di Kiri atas")
 
 if __name__ == "__main__":
     main()
