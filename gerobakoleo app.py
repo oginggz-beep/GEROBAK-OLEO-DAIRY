@@ -3,6 +3,7 @@ import json
 import os
 import requests
 import pandas as pd
+from io import BytesIO
 from datetime import datetime, timedelta
 
 # --- LIBRARY GOOGLE SHEET ---
@@ -17,8 +18,6 @@ except ImportError:
 TOKEN_BOT = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4" 
 ID_OWNER  = "8505488457"  
 PIN_OWNER = "8888"
-
-# 👇 NAMA SHEET HARUS SAMA PERSIS (HURUF BESAR/KECIL & SPASI)
 NAMA_GOOGLE_SHEET = "Penyimpanan data gerobak" 
 
 # ================= 2. DATABASE & FILE =================
@@ -26,7 +25,7 @@ FILE_DB_GEROBAK = "database_gerobak.json"
 FILE_DB_STAFF   = "database_staff.json"   
 FILE_DB_MENU    = "database_menu.json"    
 FILE_DB_LOKASI  = "database_lokasi.json"  
-FILE_DB_RIWAYAT = "database_riwayat.json" # Penampungan sementara
+FILE_DB_RIWAYAT = "database_riwayat.json" 
 
 # Data Default
 MENU_DEFAULT = {
@@ -96,7 +95,15 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI UPLOAD GOOGLE SHEET (KOREKSI) =================
+# ================= 4. FUNGSI GOOGLE SHEET & DOWNLOAD =================
+
+def get_gsheet_client():
+    if not HAS_GSHEET_LIB or not os.path.exists("credentials.json"):
+        return None
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+    client = gspread.authorize(creds)
+    return client
 
 def simpan_riwayat_lokal(data_list):
     """Simpan sementara di laptop/server"""
@@ -106,55 +113,60 @@ def simpan_riwayat_lokal(data_list):
     save_json(FILE_DB_RIWAYAT, riwayat_baru)
 
 def upload_ke_gsheet():
-    """Fungsi Upload dengan Pengecekan Error Detail"""
-    if not HAS_GSHEET_LIB:
-        return False, "❌ Library 'gspread' belum terinstall."
-    
-    if not os.path.exists("credentials.json"):
-        return False, "❌ File 'credentials.json' hilang!"
+    client = get_gsheet_client()
+    if not client: return False, "❌ Koneksi Gagal / Library tidak ada."
 
     try:
-        # 1. Koneksi
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-        client = gspread.authorize(creds)
-        
-        # 2. Cek Sheet Ada atau Tidak
         try:
             sheet = client.open(NAMA_GOOGLE_SHEET).sheet1
         except gspread.SpreadsheetNotFound:
-            return False, f"❌ Google Sheet '{NAMA_GOOGLE_SHEET}' TIDAK DITEMUKAN!\nPastikan nama sama persis & sudah di-Share ke email Bot."
+            return False, f"❌ Sheet '{NAMA_GOOGLE_SHEET}' tidak ditemukan."
 
-        # 3. Ambil Data Lokal
         data_lokal = load_json(FILE_DB_RIWAYAT)
-        if not data_lokal:
-            return False, "⚠️ Tidak ada data baru untuk di-upload."
+        if not data_lokal: return False, "⚠️ Tidak ada data baru."
 
-        # 4. Format Data (Dict to List)
-        # Cek apakah sheet kosong? Jika ya, tambah Header dulu
+        # Cek Header
         existing_data = sheet.get_all_values()
         is_empty = len(existing_data) == 0
-
         rows_to_upload = []
-        # Ambil keys dari data pertama sebagai Header
         if is_empty and len(data_lokal) > 0:
             header = list(data_lokal[0].keys())
             rows_to_upload.append(header)
 
         for entry in data_lokal:
-            # Pastikan urutan values sesuai header (jika struktur json konsisten)
             rows_to_upload.append(list(entry.values()))
 
-        # 5. Push Data
         sheet.append_rows(rows_to_upload)
-
-        # 6. Bersihkan Lokal
-        save_json(FILE_DB_RIWAYAT, [])
-        
-        return True, f"✅ Sukses! {len(data_lokal)} data masuk ke Sheet '{NAMA_GOOGLE_SHEET}'."
+        save_json(FILE_DB_RIWAYAT, []) # Bersihkan lokal
+        return True, f"✅ Sukses Upload {len(data_lokal)} data."
 
     except Exception as e:
-        return False, f"❌ Error Sistem: {str(e)}"
+        return False, f"❌ Error: {str(e)}"
+
+# --- FITUR BARU: FETCH DATA DARI GOOGLE SHEET ---
+def ambil_data_gsheet_ke_excel():
+    client = get_gsheet_client()
+    if not client: return None
+    try:
+        sheet = client.open(NAMA_GOOGLE_SHEET).sheet1
+        data = sheet.get_all_records()
+        df = pd.DataFrame(data)
+        
+        # Convert ke Excel Bytes
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Laporan')
+        return output.getvalue()
+    except: return None
+
+def convert_pending_to_excel():
+    data = load_json(FILE_DB_RIWAYAT)
+    if not data: return None
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Pending')
+    return output.getvalue()
 
 # ================= 5. TAMPILAN APLIKASI =================
 def main():
@@ -214,7 +226,7 @@ def main():
             c2.metric("Total Staff", f"{len(ds)}")
             c3.metric("Pending Upload", f"{len(riwayat_pending)} Data")
             
-            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "☁️ Google Sheet"])
+            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "☁️ Laporan & Download"])
             
             with t1: 
                 if not db_gerobak: st.caption("Semua gerobak tutup.")
@@ -255,20 +267,42 @@ def main():
                     if st.button("Hapus Cabang"): hapus_lokasi(del_lok.split(' - ')[0]); st.rerun()
 
             with t5: 
-                st.subheader("Cloud Sync (Google Sheet)")
-                st.caption(f"Target Sheet: **{NAMA_GOOGLE_SHEET}**")
+                st.subheader("Pusat Data & Laporan")
+                st.caption(f"Google Sheet: **{NAMA_GOOGLE_SHEET}**")
+
+                col_up, col_down = st.columns(2)
                 
-                if len(riwayat_pending) > 0:
-                    st.info(f"Ada **{len(riwayat_pending)}** data baru belum di-upload.")
-                    if st.button("☁️ UPLOAD SEKARANG"):
-                        with st.spinner("Menghubungkan ke Google..."):
-                            sukses, pesan = upload_ke_gsheet()
-                            if sukses:
-                                st.success(pesan); st.balloons(); st.rerun()
+                with col_up:
+                    st.markdown("#### 1. Upload ke Cloud")
+                    if len(riwayat_pending) > 0:
+                        st.info(f"Ada **{len(riwayat_pending)}** data pending.")
+                        if st.button("☁️ UPLOAD SEKARANG"):
+                            with st.spinner("Mengupload..."):
+                                sukses, pesan = upload_ke_gsheet()
+                                if sukses: st.success(pesan); st.balloons(); st.rerun()
+                                else: st.error(pesan)
+                    else:
+                        st.success("✅ Semua data sudah di-upload.")
+                        excel_pending = convert_pending_to_excel()
+                        if excel_pending: # Jaga2 kalau ada glitch
+                            st.download_button("📂 Download Backup Pending", data=excel_pending, file_name="Backup_Pending.xlsx")
+
+                with col_down:
+                    st.markdown("#### 2. Download Laporan")
+                    st.write("Ambil semua data dari Google Sheet.")
+                    if st.button("📥 TARIK DATA DARI GOOGLE SHEET"):
+                        with st.spinner("Mengunduh data..."):
+                            excel_data = ambil_data_gsheet_ke_excel()
+                            if excel_data:
+                                st.download_button(
+                                    label="💾 KLIK UNTUK SIMPAN EXCEL",
+                                    data=excel_data,
+                                    file_name=f"Laporan_Full_{waktu_skrg.strftime('%Y%m%d')}.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                )
                             else:
-                                st.error(pesan)
-                else:
-                    st.success("✅ Data Aman. Tidak ada pending upload.")
+                                st.error("Gagal menarik data. Cek koneksi/nama sheet.")
+
             st.divider()
 
         # ================= FITUR STAFF =================
@@ -354,7 +388,7 @@ def main():
                             "ITEM": "SETORAN", "HARGA":0, "AWAL":0, "SISA":0, "TERJUAL":0, "OMZET": total_setor, "TIPE": "SETORAN", "CATATAN": catatan
                         })
                         
-                        simpan_riwayat_lokal(list_transaksi) # Simpan Lokal Dulu
+                        simpan_riwayat_lokal(list_transaksi) 
                         
                         rincian_text = ""
                         for item in list_transaksi:
@@ -374,4 +408,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
+                
