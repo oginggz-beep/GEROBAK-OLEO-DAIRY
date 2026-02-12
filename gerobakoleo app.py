@@ -212,7 +212,7 @@ def main():
     MENU_SEKARANG = get_menu_aktif()
     waktu_skrg = get_wib_now()
     
-    st.title("🗿🗿🗿🗿🗿🗿🗿🗿🗿🗿🗿🗿🗿🗿🗿🗿🗿")
+    st.title("OLEO DAIRY 🐮")
     st.caption(f"📅 {waktu_skrg.strftime('%d-%m-%Y %H:%M')} WIB")
 
     if 'user_nama' not in st.session_state: st.session_state['user_nama'] = None
