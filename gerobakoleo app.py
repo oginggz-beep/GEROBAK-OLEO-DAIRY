@@ -20,13 +20,13 @@ FILE_DB_LOKASI  = "database_lokasi.json"
 
 # Data Default
 MENU_DEFAULT = {
-    "Fresh Milk": 8000, "Coklat Milk": 10000,
-    "Strawberry Milk": 10000, "Vanilla Milk": 10000
+    "Strawberry Milk": 10000, "Coklat Milk": 12000,
+    "Kopi Susu Aren": 15000, "Matcha Latte": 15000
 }
 LOKASI_DEFAULT = {
-    "1": "Gerobak 1", 
-    "2": "Gerobak 2", 
-    "3": "Gerobak 3"
+    "1": "Gerobak 01 - Alun-Alun", 
+    "2": "Gerobak 02 - Stasiun Kota", 
+    "3": "Gerobak 03 - Kampus Unand"
 }
 
 # ================= 3. FUNGSI BANTUAN =================
@@ -68,8 +68,8 @@ def get_lokasi_aktif():
     if not data: save_json(FILE_DB_LOKASI, LOKASI_DEFAULT); return LOKASI_DEFAULT
     return data
 
-def simpan_lokasi_baru(id_lokasi, nama_lokasi):
-    data = get_lokasi_aktif(); data[str(id_lokasi)] = nama_lokasi; save_json(FILE_DB_LOKASI, data)
+def simpan_lokasi_baru(id_lokasi, nama_lengkap_lokasi):
+    data = get_lokasi_aktif(); data[str(id_lokasi)] = nama_lengkap_lokasi; save_json(FILE_DB_LOKASI, data)
 
 def hapus_lokasi(id_lokasi):
     data = get_lokasi_aktif()
@@ -97,7 +97,7 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI EXCEL PER STAFF (FIX RUPIAH) =================
+# ================= 4. FUNGSI EXCEL PER STAFF (FORMAT RUPIAH DI DEPAN) =================
 def get_nama_file_excel(nama_staff):
     nama_clean = nama_staff.replace(" ", "_").upper()
     return f"LAPORAN_{nama_clean}.xlsx"
@@ -106,43 +106,62 @@ def rapikan_excel(filename):
     try:
         wb = openpyxl.load_workbook(filename)
         ws = wb.active
+        
+        # Styling Header
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="203764", end_color="203764", fill_type="solid")
         center = Alignment(horizontal="center", vertical="center")
         thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
         
+        # Format Header (Baris 1)
         for cell in ws[1]:
-            cell.font = header_font; cell.fill = header_fill; cell.alignment = center; cell.border = thin_border
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center
+            cell.border = thin_border
 
+        # Loop per kolom untuk format angka dan lebar
         for col in ws.columns:
             max_len = 0
             col_letter = col[0].column_letter
+            
+            # Cek Judul Header Kolom Ini
+            header_cell = ws[f"{col_letter}1"]
+            header_text = str(header_cell.value).upper() if header_cell.value else ""
+            
+            # Tentukan apakah ini kolom duit?
+            is_currency = any(x in header_text for x in ['OMZET', 'HARGA', 'TUNAI', 'QRIS', 'TOTAL'])
+
             for cell in col:
                 cell.border = thin_border
+                
+                # --- FORMAT RUPIAH DI DEPAN (FORCE) ---
+                if is_currency and cell.row > 1: 
+                    cell.number_format = '"Rp" #,##0' 
+                
                 try:
                     if cell.value and len(str(cell.value)) > max_len: max_len = len(str(cell.value))
                 except: pass
-                
-                header_text = ws[f"{col_letter}1"].value
-                # --- PERBAIKAN FORMAT RUPIAH DI SINI ---
-                if header_text and any(x in str(header_text).upper() for x in ['OMZET', 'HARGA', 'TUNAI', 'QRIS', 'TOTAL']):
-                    # Format Excel: "Rp" Spasi Angka (Rp #,##0)
-                    cell.number_format = '"Rp" #,##0' 
             
             ws.column_dimensions[col_letter].width = (max_len + 5)
+            
         wb.save(filename)
-    except: pass
+    except Exception as e:
+        print(f"Error styling Excel: {e}")
 
 def simpan_ke_excel_staff(data_rows, nama_staff):
     try:
         nama_file = get_nama_file_excel(nama_staff)
         df_baru = pd.DataFrame(data_rows)
+        
         if os.path.exists(nama_file):
+            # Timpa file lama dengan data gabungan agar format baru selalu diterapkan
             df_lama = pd.read_excel(nama_file)
             df_final = pd.concat([df_lama, df_baru], ignore_index=True)
+            df_final.to_excel(nama_file, index=False)
         else:
-            df_final = df_baru
-        df_final.to_excel(nama_file, index=False)
+            df_baru.to_excel(nama_file, index=False)
+            
         rapikan_excel(nama_file)
         return nama_file
     except Exception as e:
@@ -206,10 +225,11 @@ def main():
             c2.metric("Total Staff", f"{len(ds)}")
             c3.metric("Total Menu", f"{len(MENU_SEKARANG)}")
             
-            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "📥 Laporan"])
+            # UPDATE: Tab Nama diganti "Gerobak"
+            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Kelola Gerobak", "📥 Laporan"])
             
             with t1: 
-                st.write("**Status Gerobak:**")
+                st.write("**Status Operasional:**")
                 if not db_gerobak: st.caption("Semua gerobak tutup.")
                 for id_lok, nama_lok in LOKASI_SEKARANG.items():
                     info = db_gerobak.get(nama_lok)
@@ -239,15 +259,39 @@ def main():
                     if st.button("Hapus Menu Terpilih"): hapus_menu(del_m); st.rerun()
 
             with t4: 
-                st.dataframe(pd.DataFrame(list(LOKASI_SEKARANG.items()), columns=['ID','Nama Cabang']), hide_index=True, use_container_width=True)
+                # UPDATE: Tampilan Tabel Lokasi
+                st.subheader("Daftar Gerobak & Lokasi")
+                if LOKASI_SEKARANG:
+                    # Tampilkan tabel simple
+                    df_lokasi = pd.DataFrame(list(LOKASI_SEKARANG.items()), columns=['ID', 'Nama Gerobak - Lokasi'])
+                    st.dataframe(df_lokasi, hide_index=True, use_container_width=True)
+                
+                st.write("---")
+                st.write("**Tambah Gerobak Baru**")
+                
                 c_l1, c_l2 = st.columns([1,3])
                 ids = [int(k) for k in LOKASI_SEKARANG.keys()]
                 next_id = str(max(ids) + 1) if ids else "1"
-                new_id = c_l1.text_input("ID", value=next_id); new_nm = c_l2.text_input("Nama Cabang")
-                if st.button("Tambah Cabang") and new_nm: simpan_lokasi_baru(new_id, new_nm); st.rerun()
+                
+                # Input Data Baru
+                input_id = c_l1.text_input("ID", value=next_id)
+                input_nama = c_l2.text_input("Nama Gerobak (Cth: Gerobak 01)")
+                input_lokasi = st.text_input("📍 Lokasi Fisik (Cth: Kampus Unand / Depan Masjid)")
+                
+                if st.button("💾 Simpan Gerobak"):
+                    if input_nama and input_lokasi:
+                        # GABUNGKAN NAMA DAN LOKASI DISINI
+                        nama_lengkap = f"{input_nama} - {input_lokasi}"
+                        simpan_lokasi_baru(input_id, nama_lengkap)
+                        st.success(f"Berhasil: {nama_lengkap}")
+                        st.rerun()
+                    else:
+                        st.error("Nama Gerobak dan Lokasi wajib diisi!")
+
                 if LOKASI_SEKARANG:
-                    del_lok = st.selectbox("Hapus Cabang:", [f"{k} - {v}" for k,v in LOKASI_SEKARANG.items()])
-                    if st.button("Hapus Cabang"): hapus_lokasi(del_lok.split(' - ')[0]); st.rerun()
+                    st.write("---")
+                    del_lok = st.selectbox("Hapus Gerobak:", [f"{k} - {v}" for k,v in LOKASI_SEKARANG.items()])
+                    if st.button("🗑️ Hapus Gerobak"): hapus_lokasi(del_lok.split(' - ')[0]); st.rerun()
 
             with t5: 
                 st.write("Unduh Laporan Per Staff:")
@@ -268,8 +312,10 @@ def main():
         # ================= FITUR STAFF =================
         if not LOKASI_SEKARANG: st.error("Database Kosong"); st.stop()
 
-        st.subheader("📍 Pilih Lokasi Kerja")
-        pilihan_gerobak = st.selectbox("Lokasi Anda:", list(LOKASI_SEKARANG.values()))
+        # UPDATE: Subheader
+        st.subheader("📍 Pilih Posisi Gerobak")
+        # Selectbox akan menampilkan "Gerobak 1 - Unand" otomatis
+        pilihan_gerobak = st.selectbox("Pilih Gerobak & Lokasi:", list(LOKASI_SEKARANG.values()))
         
         db_gerobak = load_json(FILE_DB_GEROBAK)
         shift_aktif_di_lokasi = db_gerobak.get(pilihan_gerobak)
@@ -282,9 +328,12 @@ def main():
             if data_g['pin_pic'] == pin and nama_g != pilihan_gerobak: lokasi_lain_user = nama_g; break
 
         if is_lokasi_terisi:
-            if is_saya_di_sini: st.success(f"✅ ANDA SEDANG AKTIF DI SINI ({pilihan_gerobak})")
-            else: st.error(f"⛔ LOKASI INI DIPAKAI OLEH: {shift_aktif_di_lokasi['pic']}")
-        else: st.info("🟢 Lokasi Kosong. Siap Buka Shift.")
+            if is_saya_di_sini: 
+                st.success(f"✅ ANDA SEDANG AKTIF DI: {pilihan_gerobak}")
+            else: 
+                st.error(f"⛔ {pilihan_gerobak} SEDANG DIPAKAI: {shift_aktif_di_lokasi['pic']}")
+        else: 
+            st.info(f"🟢 {pilihan_gerobak} Kosong. Siap Buka Shift.")
 
         t_op, t_cl = st.tabs(["☀️ BUKA TOKO", "🌙 TUTUP TOKO"])
 
@@ -393,4 +442,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
