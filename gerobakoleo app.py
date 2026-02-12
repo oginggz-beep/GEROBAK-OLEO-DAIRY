@@ -22,7 +22,7 @@ FILE_DB_LOKASI  = "database_lokasi.json"
 # --- DATA DEFAULT BARU (3 KATEGORI) ---
 MENU_DEFAULT = {
     "Regular (Cup)": {
-        "Strawberry Milk": 10000, 
+        "Strawauauaua Milk": 10000, 
         "Coklat Milk": 12000,
         "Kopi Susu Aren": 15000
     },
