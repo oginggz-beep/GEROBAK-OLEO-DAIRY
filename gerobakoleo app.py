@@ -3,7 +3,6 @@ import json
 import os
 import requests
 import pandas as pd
-from io import BytesIO
 from datetime import datetime, timedelta
 
 # --- LIBRARY GOOGLE SHEET ---
@@ -18,6 +17,8 @@ except ImportError:
 TOKEN_BOT = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4" 
 ID_OWNER  = "8505488457"  
 PIN_OWNER = "8888"
+
+# Nama Google Sheet Tujuan
 NAMA_GOOGLE_SHEET = "Penyimpanan data gerobak" 
 
 # ================= 2. DATABASE & FILE =================
@@ -25,7 +26,7 @@ FILE_DB_GEROBAK = "database_gerobak.json"
 FILE_DB_STAFF   = "database_staff.json"   
 FILE_DB_MENU    = "database_menu.json"    
 FILE_DB_LOKASI  = "database_lokasi.json"  
-FILE_DB_RIWAYAT = "database_riwayat.json" 
+FILE_DB_RIWAYAT = "database_riwayat.json" # Penampungan sementara sebelum upload
 
 # Data Default
 MENU_DEFAULT = {
@@ -95,78 +96,66 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI GOOGLE SHEET & DOWNLOAD =================
-
-def get_gsheet_client():
-    if not HAS_GSHEET_LIB or not os.path.exists("credentials.json"):
-        return None
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-    client = gspread.authorize(creds)
-    return client
+# ================= 4. FUNGSI UPLOAD KE GOOGLE SHEET =================
 
 def simpan_riwayat_lokal(data_list):
-    """Simpan sementara di laptop/server"""
+    """Simpan sementara di laptop/server agar aplikasi cepat"""
     riwayat_lama = load_json(FILE_DB_RIWAYAT)
     if not isinstance(riwayat_lama, list): riwayat_lama = []
     riwayat_baru = riwayat_lama + data_list
     save_json(FILE_DB_RIWAYAT, riwayat_baru)
 
-def upload_ke_gsheet():
-    client = get_gsheet_client()
-    if not client: return False, "❌ Koneksi Gagal / Library tidak ada."
+def input_data_ke_gsheet():
+    """Memindahkan data dari JSON Lokal -> Google Sheet"""
+    
+    # 1. Cek Kelengkapan
+    if not HAS_GSHEET_LIB:
+        return False, "❌ Library 'gspread' belum terinstall."
+    if not os.path.exists("credentials.json"):
+        return False, "❌ File 'credentials.json' tidak ditemukan!"
 
     try:
+        # 2. Koneksi ke Google
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+        client = gspread.authorize(creds)
+        
+        # 3. Buka Sheet
         try:
             sheet = client.open(NAMA_GOOGLE_SHEET).sheet1
         except gspread.SpreadsheetNotFound:
-            return False, f"❌ Sheet '{NAMA_GOOGLE_SHEET}' tidak ditemukan."
+            return False, f"❌ Google Sheet '{NAMA_GOOGLE_SHEET}' tidak ditemukan!\nPastikan nama sama persis."
 
+        # 4. Ambil Data Lokal
         data_lokal = load_json(FILE_DB_RIWAYAT)
-        if not data_lokal: return False, "⚠️ Tidak ada data baru."
+        if not data_lokal:
+            return False, "⚠️ Tidak ada data baru untuk di-input."
 
-        # Cek Header
+        # 5. Siapkan Data (Header & Rows)
         existing_data = sheet.get_all_values()
-        is_empty = len(existing_data) == 0
+        is_sheet_empty = len(existing_data) == 0
+
         rows_to_upload = []
-        if is_empty and len(data_lokal) > 0:
+        
+        # Jika sheet masih kosong melompong, kita buatkan Header kolom dulu
+        if is_sheet_empty and len(data_lokal) > 0:
             header = list(data_lokal[0].keys())
             rows_to_upload.append(header)
 
+        # Masukkan isi data
         for entry in data_lokal:
             rows_to_upload.append(list(entry.values()))
 
+        # 6. Kirim ke Google Sheet
         sheet.append_rows(rows_to_upload)
-        save_json(FILE_DB_RIWAYAT, []) # Bersihkan lokal
-        return True, f"✅ Sukses Upload {len(data_lokal)} data."
+
+        # 7. Hapus Data Lokal (Karena sudah sukses pindah ke cloud)
+        save_json(FILE_DB_RIWAYAT, [])
+        
+        return True, f"✅ Sukses! {len(data_lokal)} data berhasil di-input ke Google Sheet."
 
     except Exception as e:
-        return False, f"❌ Error: {str(e)}"
-
-# --- FITUR BARU: FETCH DATA DARI GOOGLE SHEET ---
-def ambil_data_gsheet_ke_excel():
-    client = get_gsheet_client()
-    if not client: return None
-    try:
-        sheet = client.open(NAMA_GOOGLE_SHEET).sheet1
-        data = sheet.get_all_records()
-        df = pd.DataFrame(data)
-        
-        # Convert ke Excel Bytes
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Laporan')
-        return output.getvalue()
-    except: return None
-
-def convert_pending_to_excel():
-    data = load_json(FILE_DB_RIWAYAT)
-    if not data: return None
-    df = pd.DataFrame(data)
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Pending')
-    return output.getvalue()
+        return False, f"❌ Gagal Input: {str(e)}"
 
 # ================= 5. TAMPILAN APLIKASI =================
 def main():
@@ -224,9 +213,9 @@ def main():
             c1, c2, c3 = st.columns(3)
             c1.metric("Gerobak Buka", f"{len(db_gerobak)}")
             c2.metric("Total Staff", f"{len(ds)}")
-            c3.metric("Pending Upload", f"{len(riwayat_pending)} Data")
+            c3.metric("Data Pending", f"{len(riwayat_pending)}")
             
-            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "☁️ Laporan & Download"])
+            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "☁️ Input ke GSheet"])
             
             with t1: 
                 if not db_gerobak: st.caption("Semua gerobak tutup.")
@@ -267,41 +256,26 @@ def main():
                     if st.button("Hapus Cabang"): hapus_lokasi(del_lok.split(' - ')[0]); st.rerun()
 
             with t5: 
-                st.subheader("Pusat Data & Laporan")
-                st.caption(f"Google Sheet: **{NAMA_GOOGLE_SHEET}**")
-
-                col_up, col_down = st.columns(2)
+                st.subheader("Input Data Aplikasi ke Google Sheet")
+                st.write(f"Target Sheet: **{NAMA_GOOGLE_SHEET}**")
                 
-                with col_up:
-                    st.markdown("#### 1. Upload ke Cloud")
-                    if len(riwayat_pending) > 0:
-                        st.info(f"Ada **{len(riwayat_pending)}** data pending.")
-                        if st.button("☁️ UPLOAD SEKARANG"):
-                            with st.spinner("Mengupload..."):
-                                sukses, pesan = upload_ke_gsheet()
-                                if sukses: st.success(pesan); st.balloons(); st.rerun()
-                                else: st.error(pesan)
-                    else:
-                        st.success("✅ Semua data sudah di-upload.")
-                        excel_pending = convert_pending_to_excel()
-                        if excel_pending: # Jaga2 kalau ada glitch
-                            st.download_button("📂 Download Backup Pending", data=excel_pending, file_name="Backup_Pending.xlsx")
-
-                with col_down:
-                    st.markdown("#### 2. Download Laporan")
-                    st.write("Ambil semua data dari Google Sheet.")
-                    if st.button("📥 TARIK DATA DARI GOOGLE SHEET"):
-                        with st.spinner("Mengunduh data..."):
-                            excel_data = ambil_data_gsheet_ke_excel()
-                            if excel_data:
-                                st.download_button(
-                                    label="💾 KLIK UNTUK SIMPAN EXCEL",
-                                    data=excel_data,
-                                    file_name=f"Laporan_Full_{waktu_skrg.strftime('%Y%m%d')}.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                )
+                # Cek apakah ada data lokal yg belum diinput
+                if len(riwayat_pending) > 0:
+                    st.info(f"Ada **{len(riwayat_pending)}** transaksi baru di aplikasi yang belum masuk ke Google Sheet.")
+                    st.write("Klik tombol di bawah untuk memasukkan data tersebut sekarang:")
+                    
+                    if st.button("☁️ INPUT SEMUA DATA KE GOOGLE SHEET"):
+                        with st.spinner("Sedang memproses input data..."):
+                            sukses, pesan = input_data_ke_gsheet()
+                            if sukses:
+                                st.success(pesan)
+                                st.balloons()
+                                st.rerun() # Refresh halaman biar angka pending jadi 0
                             else:
-                                st.error("Gagal menarik data. Cek koneksi/nama sheet.")
+                                st.error(pesan)
+                else:
+                    st.success("✅ Semua data aplikasi sudah aman (Sudah masuk ke Google Sheet).")
+                    st.caption("Belum ada transaksi baru lagi.")
 
             st.divider()
 
@@ -408,4 +382,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-                
+        
