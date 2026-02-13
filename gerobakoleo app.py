@@ -10,7 +10,7 @@ import glob
 
 # ================= 1. KONFIGURASI UTAMA =================
 TOKEN_FONNTE    = "VP1u4odNqETyKTs8mXp4"  # Token Fonnte Kamu
-TARGET_WA       = "PASTE_ID_GRUP_WA_DISINI@g.us" # Ganti dengan ID Grup WA (berakhiran @g.us)
+TARGET_WA       = "120363406910541987@g.us" # Ganti dengan ID Grup WA (berakhiran @g.us)
 PIN_OWNER_LOGIN = "8888" # PIN untuk Login ke Menu Owner
 PASSWORD_RESET  = "ciroclistopel" # Password khusus untuk Hapus Data
 
