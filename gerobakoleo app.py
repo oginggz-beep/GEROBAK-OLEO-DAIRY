@@ -171,11 +171,15 @@ def simpan_ke_excel_staff(list_transaksi, nama_staff, uang_tunai, uang_qris, tot
     try:
         nama_file = get_nama_file_excel(nama_staff)
         
+        # PERBAIKAN URUTAN: Masukkan data sesuai permintaan awal
         data_row = {
             "TANGGAL": get_wib_now().strftime("%Y-%m-%d"),
             "JAM": get_wib_now().strftime("%H:%M"),
             "NAMA": nama_staff,
             "GEROBAK": list_transaksi[0]['GEROBAK'] if list_transaksi else "-",
+            "CASH": uang_tunai,
+            "QRIS": uang_qris,
+            "TOTAL OMZET": total_setor,
         }
 
         for item in list_transaksi:
@@ -183,9 +187,6 @@ def simpan_ke_excel_staff(list_transaksi, nama_staff, uang_tunai, uang_qris, tot
                 col_name = f"{item['KATEGORI']} - {item['ITEM']} ({int(item['HARGA'])})"
                 data_row[col_name] = item['TERJUAL']
 
-        data_row["CASH"] = uang_tunai
-        data_row["QRIS"] = uang_qris
-        data_row["TOTAL OMZET"] = total_setor
         data_row["CATATAN"] = catatan
 
         df_baru = pd.DataFrame([data_row])
@@ -194,10 +195,21 @@ def simpan_ke_excel_staff(list_transaksi, nama_staff, uang_tunai, uang_qris, tot
             df_lama = pd.read_excel(nama_file)
             df_final = pd.concat([df_lama, df_baru], ignore_index=True)
             df_final = df_final.fillna(0)
-            df_final.to_excel(nama_file, index=False)
         else:
-            df_baru = df_baru.fillna(0)
-            df_baru.to_excel(nama_file, index=False)
+            df_final = df_baru.fillna(0)
+            
+        # --- LOGIKA PENJAGA URUTAN KOLOM EXCEL ---
+        kolom_utama = ["TANGGAL", "JAM", "NAMA", "GEROBAK", "CASH", "QRIS", "TOTAL OMZET"]
+        # Ambil kolom menu yang ada di file, tapi pisahkan dari kolom utama & catatan
+        kolom_menu = [col for col in df_final.columns if col not in kolom_utama and col != "CATATAN"]
+        
+        # Gabungkan menjadi urutan yang pasti: Utama -> Menu -> Catatan
+        urutan_final = kolom_utama + kolom_menu
+        if "CATATAN" in df_final.columns:
+            urutan_final.append("CATATAN")
+            
+        df_final = df_final[urutan_final]
+        df_final.to_excel(nama_file, index=False)
             
         rapikan_excel(nama_file)
         return nama_file
@@ -377,7 +389,6 @@ def main():
                     st.write("**Pilih Barang & Jumlah yang Dikirim:**")
                     sj_stok_input = {}
                     
-                    # --- INPUT BARANG MENGGUNAKAN DAFTAR MENU ---
                     for kategori, items in MENU_SEKARANG.items():
                         with st.expander(f"📦 Kirim {kategori}", expanded=False):
                             cols = st.columns(2)
@@ -394,7 +405,6 @@ def main():
                             db_sj = load_json(FILE_DB_SURAT_JALAN)
                             id_sj = f"SJ-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                             
-                            # Buat teks format untuk notifikasi dan riwayat
                             sj_catatan_text = ""
                             for k_item, jml in sj_stok_input.items():
                                 kat_split, nama_split = k_item.split('_', 1)
@@ -421,7 +431,6 @@ def main():
                     for id_sj, data_sj in reversed(list(db_sj.items())):
                         status_icon = "⏳" if data_sj['status'] == "Menunggu Konfirmasi" else "✅"
                         with st.expander(f"{status_icon} {data_sj['tanggal']} | Tujuan: {data_sj['tujuan']}"):
-                            # Gunakan format text jika ada, jika format lama gunakan 'barang'
                             st.write(f"**Barang:**{data_sj.get('barang_text', data_sj.get('barang', ''))}")
                             st.write(f"**Status:** {data_sj['status']} (Penerima: {data_sj['penerima']})")
                             if st.button(f"Hapus Riwayat", key=f"del_sj_{id_sj}"):
@@ -470,23 +479,20 @@ def main():
                     save_json(FILE_DB_SURAT_JALAN, db_sj)
 
                     pesan_tambahan_bot = ""
-
-                    # LOGIKA PENTING: Jika staff SEDANG DALAM SHIFT, tambahkan stok ke menu closing otomatis
                     if is_saya_di_sini:
                         stok_aktif = db_gerobak[pilihan_gerobak].get('stok', {})
                         barang_masuk = data_sj.get('barang_dict', {})
                         
                         for k, v in barang_masuk.items():
                             if k in stok_aktif:
-                                stok_aktif[k] += v  # Tambah ke stok yang sudah ada
+                                stok_aktif[k] += v  
                             else:
-                                stok_aktif[k] = v   # Jika pagi belum ada, munculkan otomatis
+                                stok_aktif[k] = v   
                         
                         db_gerobak[pilihan_gerobak]['stok'] = stok_aktif
                         save_json(FILE_DB_GEROBAK, db_gerobak)
                         pesan_tambahan_bot = "\n*(Stok berhasil ditambahkan otomatis ke menu closing)*"
 
-                    # Kirim notifikasi dengan label (Tambahan Stok Jualan)
                     kirim_telegram(f"✅ **BARANG DITERIMA (Tambahan Stok Jualan)**\nTujuan: {pilihan_gerobak}\nPenerima: {user}\nJam: {get_wib_now().strftime('%H:%M')}{pesan_tambahan_bot}")
                     st.success("Barang berhasil dikonfirmasi masuk!")
                     st.rerun()
@@ -506,7 +512,6 @@ def main():
                 st.write("📝 **Persiapan Buka Toko (Input Stok)**")
                 stok_input = {}
                 
-                # --- INPUT STOK (ACCORDION) ---
                 for kategori, items in MENU_SEKARANG.items():
                     with st.expander(f"📦 Stok {kategori}", expanded=True):
                         cols = st.columns(2)
@@ -518,18 +523,21 @@ def main():
                 
                 st.write("---")
                 if st.button("🚀 BUKA SHIFT SEKARANG", key="btn_open"):
-                    jam_skrg = get_wib_now().strftime("%H:%M")
-                    list_stok_text = ""
-                    for k_item, jml in stok_input.items():
-                        kat_split, nama_split = k_item.split('_', 1)
-                        list_stok_text += f"\n📦 [{kat_split}] {nama_split}: {jml}"
-                    if not list_stok_text: list_stok_text = "\n(Nihil)"
+                    # PERBAIKAN: Validasi input stok tidak boleh kosong
+                    if not stok_input:
+                        st.error("⚠️ Stok awal tidak boleh kosong! Wajib isi minimal 1 barang untuk buka toko.")
+                    else:
+                        jam_skrg = get_wib_now().strftime("%H:%M")
+                        list_stok_text = ""
+                        for k_item, jml in stok_input.items():
+                            kat_split, nama_split = k_item.split('_', 1)
+                            list_stok_text += f"\n📦 [{kat_split}] {nama_split}: {jml}"
 
-                    d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
-                    db_gerobak[pilihan_gerobak] = d; save_json(FILE_DB_GEROBAK, db_gerobak)
-                    
-                    kirim_telegram(f"☀️ OPENING {pilihan_gerobak}\n👤 {user}\n⏰ {jam_skrg}\n\n**STOK AWAL:**{list_stok_text}")
-                    st.success("Buka!"); st.rerun()
+                        d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
+                        db_gerobak[pilihan_gerobak] = d; save_json(FILE_DB_GEROBAK, db_gerobak)
+                        
+                        kirim_telegram(f"☀️ OPENING {pilihan_gerobak}\n👤 {user}\n⏰ {jam_skrg}\n\n**STOK AWAL:**{list_stok_text}")
+                        st.success("Buka!"); st.rerun()
 
         with t_cl:
             if not is_saya_di_sini:
@@ -539,14 +547,12 @@ def main():
                 st.write("📝 **Laporan Penjualan**")
                 omzet_total = 0; list_penjualan_temporary = [] 
                 
-                # --- INPUT PENJUALAN (ACCORDION) ---
                 for kategori, items in MENU_SEKARANG.items():
                     with st.expander(f"💰 Penjualan {kategori}", expanded=True):
                         for m, harga_satuan in items.items():
                             key_unik = f"{kategori}_{m}"
                             stok_awal = int(shift_aktif_di_lokasi['stok'].get(key_unik, 0))
                             
-                            # Logika akan otomatis memunculkan menu jika stok_awal > 0 (baik dari input pagi atau kiriman siang)
                             if stok_awal > 0:
                                 sisa = st.number_input(f"Sisa {m} (Awal + Tambahan: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{key_unik}")
                                 terjual = stok_awal - sisa
@@ -569,7 +575,6 @@ def main():
                 total_setor = uang_tunai + uang_qris
                 selisih = total_setor - omzet_total
                 
-                # --- LOGIKA VALIDASI: TOMBOL HANYA MUNCUL JIKA SELISIH 0 ---
                 if selisih == 0:
                     st.success("✅ Uang Pas! Mantaaaaaaaaaaaaaap.")
                     if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
