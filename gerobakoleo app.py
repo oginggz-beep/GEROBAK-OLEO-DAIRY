@@ -19,7 +19,7 @@ FILE_DB_GEROBAK     = "database_gerobak.json"
 FILE_DB_STAFF       = "database_staff.json"   
 FILE_DB_MENU        = "database_menu.json"    
 FILE_DB_LOKASI      = "database_lokasi.json"  
-FILE_DB_SURAT_JALAN = "database_surat_jalan.json" # <--- DB SURAT JALAN BARU
+FILE_DB_SURAT_JALAN = "database_surat_jalan.json"
 
 # --- DATA DEFAULT (3 KATEGORI) ---
 MENU_DEFAULT = {
@@ -122,7 +122,7 @@ def hapus_staff(pin):
     if pin in data: del data[pin]; save_json(FILE_DB_STAFF, data); return True
     return False
 
-# ================= 4. FUNGSI EXCEL (WIDE FORMAT + KATEGORI) =================
+# ================= 4. FUNGSI EXCEL =================
 def get_nama_file_excel(nama_staff):
     nama_clean = nama_staff.replace(" ", "_").upper()
     return f"LAPORAN_{nama_clean}.xlsx"
@@ -264,7 +264,6 @@ def main():
             c2.metric("Total Staff", f"{len(ds)}")
             c3.metric("Total Menu", f"{total_menu}")
             
-            # --- TAB DITAMBAH 1 UNTUK SURAT JALAN ---
             t1, t2, t3, t4, t5, t6 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "📥 Laporan", "🚚 Surat Jalan"])
             
             with t1: 
@@ -351,14 +350,12 @@ def main():
                     password_reset = st.text_input("Masukkan Password Reset:", type="password")
                     
                     if st.button("🔥 PIKIA-PIKIA BANA LUU"):
-                        if password_reset == PASSWORD_RESET: # Cek Password ciroclistopel
+                        if password_reset == PASSWORD_RESET: 
                             try:
-                                # Hapus DB JSON TERMASUK SURAT JALAN
                                 files_db = [FILE_DB_GEROBAK, FILE_DB_STAFF, FILE_DB_MENU, FILE_DB_LOKASI, FILE_DB_SURAT_JALAN]
                                 for fdb in files_db:
                                     if os.path.exists(fdb): os.remove(fdb)
                                 
-                                # Hapus Excel Laporan
                                 file_excel = glob.glob("LAPORAN_*.xlsx")
                                 for f in file_excel: os.remove(f)
                                 
@@ -370,32 +367,50 @@ def main():
                         else:
                             st.error("⛔ Password Salah!")
                             
-            # --- TAB 6 BARU: SURAT JALAN ---
             with t6:
                 st.subheader("🚚 Buat Surat Jalan Baru")
                 if not LOKASI_SEKARANG:
                     st.warning("Belum ada lokasi gerobak.")
                 else:
                     sj_lokasi = st.selectbox("Tujuan Gerobak:", list(LOKASI_SEKARANG.values()), key="sj_lokasi")
-                    sj_catatan = st.text_area("Daftar Barang yang Dikirim (Susu, Cup, dll):", placeholder="Contoh:\n- 10 Botol Susu Fresh Milk\n- 50 Cup Regular\n- 1 Bungkus Es Batu")
                     
+                    st.write("**Pilih Barang & Jumlah yang Dikirim:**")
+                    sj_stok_input = {}
+                    
+                    # --- INPUT BARANG MENGGUNAKAN DAFTAR MENU ---
+                    for kategori, items in MENU_SEKARANG.items():
+                        with st.expander(f"📦 Kirim {kategori}", expanded=False):
+                            cols = st.columns(2)
+                            for i, (m, hrg) in enumerate(items.items()):
+                                key_input = f"{kategori}_{m}"
+                                with cols[i%2]: 
+                                    val = st.number_input(f"{m}", min_value=0, value=0, key=f"sj_kirim_{key_input}")
+                                    if val > 0: sj_stok_input[key_input] = val 
+
                     if st.button("Kirim Surat Jalan"):
-                        if sj_catatan.strip() == "":
-                            st.error("Daftar barang tidak boleh kosong!")
+                        if not sj_stok_input:
+                            st.error("Daftar barang tidak boleh kosong! Isi minimal 1 barang.")
                         else:
                             db_sj = load_json(FILE_DB_SURAT_JALAN)
                             id_sj = f"SJ-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                             
+                            # Buat teks format untuk notifikasi dan riwayat
+                            sj_catatan_text = ""
+                            for k_item, jml in sj_stok_input.items():
+                                kat_split, nama_split = k_item.split('_', 1)
+                                sj_catatan_text += f"\n▫️ [{kat_split}] {nama_split}: {jml}"
+
                             db_sj[id_sj] = {
                                 "tanggal": get_wib_now().strftime("%Y-%m-%d %H:%M"),
                                 "tujuan": sj_lokasi,
-                                "barang": sj_catatan,
+                                "barang_dict": sj_stok_input, 
+                                "barang_text": sj_catatan_text, 
                                 "status": "Menunggu Konfirmasi",
                                 "penerima": "-"
                             }
                             save_json(FILE_DB_SURAT_JALAN, db_sj)
                             
-                            kirim_telegram(f"🚚 **SURAT JALAN BARU**\nTujuan: {sj_lokasi}\n\n**Barang:**\n{sj_catatan}\n\nMenunggu konfirmasi staff.")
+                            kirim_telegram(f"🚚 **SURAT JALAN BARU**\nTujuan: {sj_lokasi}\n\n**Barang Dikirim:**{sj_catatan_text}\n\nMenunggu konfirmasi staff.")
                             st.success("Surat Jalan berhasil dikirim ke staff!")
                             st.rerun()
 
@@ -406,7 +421,8 @@ def main():
                     for id_sj, data_sj in reversed(list(db_sj.items())):
                         status_icon = "⏳" if data_sj['status'] == "Menunggu Konfirmasi" else "✅"
                         with st.expander(f"{status_icon} {data_sj['tanggal']} | Tujuan: {data_sj['tujuan']}"):
-                            st.write(f"**Barang:**\n{data_sj['barang']}")
+                            # Gunakan format text jika ada, jika format lama gunakan 'barang'
+                            st.write(f"**Barang:**{data_sj.get('barang_text', data_sj.get('barang', ''))}")
                             st.write(f"**Status:** {data_sj['status']} (Penerima: {data_sj['penerima']})")
                             if st.button(f"Hapus Riwayat", key=f"del_sj_{id_sj}"):
                                 del db_sj[id_sj]
@@ -446,18 +462,38 @@ def main():
             if data_sj['tujuan'] == pilihan_gerobak and data_sj['status'] == "Menunggu Konfirmasi":
                 ada_surat_jalan = True
                 st.warning("🚚 **ADA BARANG MASUK DARI GUDANG!**")
-                st.info(f"**Daftar Barang:**\n{data_sj['barang']}")
+                st.info(f"**Daftar Tambahan Stok Jualan:**{data_sj.get('barang_text', data_sj.get('barang', ''))}")
+                
                 if st.button("✅ Konfirmasi Terima Barang", key=f"terima_{id_sj}"):
                     data_sj['status'] = "Diterima"
                     data_sj['penerima'] = user
                     save_json(FILE_DB_SURAT_JALAN, db_sj)
-                    kirim_telegram(f"✅ **BARANG DITERIMA**\nTujuan: {pilihan_gerobak}\nPenerima: {user}\nJam: {get_wib_now().strftime('%H:%M')}")
+
+                    pesan_tambahan_bot = ""
+
+                    # LOGIKA PENTING: Jika staff SEDANG DALAM SHIFT, tambahkan stok ke menu closing otomatis
+                    if is_saya_di_sini:
+                        stok_aktif = db_gerobak[pilihan_gerobak].get('stok', {})
+                        barang_masuk = data_sj.get('barang_dict', {})
+                        
+                        for k, v in barang_masuk.items():
+                            if k in stok_aktif:
+                                stok_aktif[k] += v  # Tambah ke stok yang sudah ada
+                            else:
+                                stok_aktif[k] = v   # Jika pagi belum ada, munculkan otomatis
+                        
+                        db_gerobak[pilihan_gerobak]['stok'] = stok_aktif
+                        save_json(FILE_DB_GEROBAK, db_gerobak)
+                        pesan_tambahan_bot = "\n*(Stok berhasil ditambahkan otomatis ke menu closing)*"
+
+                    # Kirim notifikasi dengan label (Tambahan Stok Jualan)
+                    kirim_telegram(f"✅ **BARANG DITERIMA (Tambahan Stok Jualan)**\nTujuan: {pilihan_gerobak}\nPenerima: {user}\nJam: {get_wib_now().strftime('%H:%M')}{pesan_tambahan_bot}")
                     st.success("Barang berhasil dikonfirmasi masuk!")
                     st.rerun()
 
         if ada_surat_jalan:
             st.error("⚠️ Anda wajib mengonfirmasi penerimaan Surat Jalan di atas sebelum bisa mengakses menu Gerobak.")
-            st.stop() # Hentikan proses ke bawah agar staff wajib konfirmasi dulu
+            st.stop() 
 
         # --- TABS BUKA/TUTUP TOKO STAFF ---
         t_op, t_cl = st.tabs(["☀️ BUKA TOKO", "🌙 TUTUP TOKO"])
@@ -505,14 +541,14 @@ def main():
                 
                 # --- INPUT PENJUALAN (ACCORDION) ---
                 for kategori, items in MENU_SEKARANG.items():
-                    # Hanya tampilkan accordion jika ada stok di kategori ini (Optional, disini ditampilkan semua)
                     with st.expander(f"💰 Penjualan {kategori}", expanded=True):
                         for m, harga_satuan in items.items():
                             key_unik = f"{kategori}_{m}"
                             stok_awal = int(shift_aktif_di_lokasi['stok'].get(key_unik, 0))
                             
+                            # Logika akan otomatis memunculkan menu jika stok_awal > 0 (baik dari input pagi atau kiriman siang)
                             if stok_awal > 0:
-                                sisa = st.number_input(f"Sisa {m} (Awal: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{key_unik}")
+                                sisa = st.number_input(f"Sisa {m} (Awal + Tambahan: {stok_awal})", max_value=stok_awal, min_value=0, key=f"sisa_{key_unik}")
                                 terjual = stok_awal - sisa
                                 omzet_item = terjual * harga_satuan
                                 omzet_total += omzet_item
