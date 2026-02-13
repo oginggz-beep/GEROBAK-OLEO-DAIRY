@@ -10,7 +10,7 @@ import glob
 
 # ================= 1. KONFIGURASI UTAMA =================
 TOKEN_FONNTE    = "VP1u4odNqETyKTs8mXp4"  # Token Fonnte Kamu
-TARGET_WA       = "120363406910541987@g.us" # Ganti dengan ID Grup WA (berakhiran @g.us)
+TARGET_WA       = "PASTE_ID_GRUP_WA_DISINI@g.us" # Ganti dengan ID Grup WA
 PIN_OWNER_LOGIN = "8888" # PIN untuk Login ke Menu Owner
 PASSWORD_RESET  = "ciroclistopel" # Password khusus untuk Hapus Data
 
@@ -256,7 +256,10 @@ def main():
                 if st.button("Daftarkan Staff"): 
                     if not nm or not pn: st.error("Nama dan PIN wajib diisi!")
                     elif simpan_staff_baru(nm, pn): 
-                        st.success(f"Staff {nm} Terdaftar!"); kirim_whatsapp(f"🆕 *STAFF BARU:* {nm} ({pn})")
+                        st.success(f"Staff {nm} Terdaftar!")
+                        tgl_daftar = get_wib_now().strftime("%d-%m-%Y")
+                        jam_daftar = get_wib_now().strftime("%H:%M WIB")
+                        kirim_whatsapp(f"🆕 *INFO STAFF BARU*\n📅 Tanggal: {tgl_daftar}\n⏰ Waktu: {jam_daftar}\n👤 Nama: {nm} ({pn})")
                     else: st.error("PIN Sudah Dipakai")
         else:
             st.success(f"Halo, {st.session_state['user_nama']}")
@@ -425,7 +428,9 @@ def main():
                             }
                             save_json(FILE_DB_SURAT_JALAN, db_sj)
                             
-                            kirim_whatsapp(f"🚚 *SURAT JALAN BARU*\nTujuan: {sj_lokasi}\n\n*Barang Dikirim:*{sj_catatan_text}\n\n_Menunggu konfirmasi staff._")
+                            tgl_sj = get_wib_now().strftime("%d-%m-%Y")
+                            jam_sj = get_wib_now().strftime("%H:%M WIB")
+                            kirim_whatsapp(f"🚚 *INFO SURAT JALAN BARU*\n📅 Tanggal: {tgl_sj}\n⏰ Waktu: {jam_sj}\n👤 Pengirim: {user} (Owner)\n📍 Tujuan: {sj_lokasi}\n\n*Barang Dikirim:*{sj_catatan_text}\n\n_Menunggu konfirmasi staff._")
                             st.success("Surat Jalan berhasil dikirim ke staff!")
                             st.rerun()
 
@@ -496,9 +501,11 @@ def main():
                         
                         db_gerobak[pilihan_gerobak]['stok'] = stok_aktif
                         save_json(FILE_DB_GEROBAK, db_gerobak)
-                        pesan_tambahan_bot = "\n_(Stok berhasil ditambahkan otomatis ke menu closing)_"
+                        pesan_tambahan_bot = "\n\n_(Stok berhasil ditambahkan otomatis ke menu closing)_"
 
-                    kirim_whatsapp(f"✅ *BARANG DITERIMA (Tambahan Stok Jualan)*\nTujuan: {pilihan_gerobak}\nPenerima: {user}\nJam: {get_wib_now().strftime('%H:%M')}{pesan_tambahan_bot}")
+                    tgl_terima = get_wib_now().strftime("%d-%m-%Y")
+                    jam_terima = get_wib_now().strftime("%H:%M WIB")
+                    kirim_whatsapp(f"✅ *LAPORAN TERIMA BARANG*\n📅 Tanggal: {tgl_terima}\n⏰ Waktu: {jam_terima}\n👤 Penerima: {user}\n📍 Lokasi: {pilihan_gerobak}{pesan_tambahan_bot}")
                     st.success("Barang berhasil dikonfirmasi masuk!")
                     st.rerun()
 
@@ -528,20 +535,22 @@ def main():
                 
                 st.write("---")
                 if st.button("🚀 BUKA SHIFT SEKARANG", key="btn_open"):
-                    # PERBAIKAN: Validasi input stok tidak boleh kosong
                     if not stok_input:
                         st.error("⚠️ Stok awal tidak boleh kosong! Wajib isi minimal 1 barang untuk buka toko.")
                     else:
-                        jam_skrg = get_wib_now().strftime("%H:%M")
+                        tgl_skrg = get_wib_now().strftime("%d-%m-%Y")
+                        jam_skrg_wib = get_wib_now().strftime("%H:%M WIB")
+                        jam_masuk_db = get_wib_now().strftime("%H:%M")
+                        
                         list_stok_text = ""
                         for k_item, jml in stok_input.items():
                             kat_split, nama_split = k_item.split('_', 1)
                             list_stok_text += f"\n📦 [{kat_split}] {nama_split}: {jml}"
 
-                        d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
+                        d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_masuk_db, "pic": user, "pin_pic": pin, "stok": stok_input}
                         db_gerobak[pilihan_gerobak] = d; save_json(FILE_DB_GEROBAK, db_gerobak)
                         
-                        kirim_whatsapp(f"☀️ *OPENING {pilihan_gerobak}*\n👤 {user}\n⏰ {jam_skrg}\n\n*STOK AWAL:*{list_stok_text}")
+                        kirim_whatsapp(f"☀️ *LAPORAN OPENING SHIFT*\n📅 Tanggal: {tgl_skrg}\n⏰ Waktu: {jam_skrg_wib}\n👤 Nama: {user}\n📍 Lokasi: {pilihan_gerobak}\n\n*STOK AWAL:*{list_stok_text}")
                         st.success("Buka!"); st.rerun()
 
         with t_cl:
@@ -595,7 +604,14 @@ def main():
                                     rincian_text += f"\n▫️ [{item['KATEGORI']}] {item['ITEM']}: {item['TERJUAL']}"
                             if not rincian_text: rincian_text = "\n(Nihil)"
 
-                            msg = (f"🌙 *CLOSING {pilihan_gerobak}*\n👤 {user}\n\n"
+                            tgl_tutup = get_wib_now().strftime("%d-%m-%Y")
+                            jam_tutup = get_wib_now().strftime("%H:%M WIB")
+
+                            msg = (f"🌙 *LAPORAN CLOSING SHIFT*\n"
+                                   f"📅 Tanggal: {tgl_tutup}\n"
+                                   f"⏰ Waktu: {jam_tutup}\n"
+                                   f"👤 Nama: {user}\n"
+                                   f"📍 Lokasi: {pilihan_gerobak}\n\n"
                                    f"📊 *RINCIAN TERJUAL:*{rincian_text}\n\n"
                                    f"💵 *Tunai:* {format_rupiah(uang_tunai)}\n"
                                    f"💳 *QRIS:* {format_rupiah(uang_qris)}\n"
