@@ -9,8 +9,8 @@ import openpyxl
 import glob 
 
 # ================= 1. KONFIGURASI UTAMA =================
-TOKEN_BOT = "8285539149:AAHQd-_W9aaBGSz3AUPg0oCuxabZUL6yJo4" 
-ID_OWNER  = "-1003896112460"  
+TOKEN_FONNTE    = "VP1u4odNqETyKTs8mXp4"  # Token Fonnte Kamu
+TARGET_WA       = "PASTE_ID_GRUP_WA_DISINI@g.us" # Ganti dengan ID Grup WA (berakhiran @g.us)
 PIN_OWNER_LOGIN = "8888" # PIN untuk Login ke Menu Owner
 PASSWORD_RESET  = "ciroclistopel" # Password khusus untuk Hapus Data
 
@@ -62,12 +62,21 @@ def get_wib_now():
 def format_rupiah(angka):
     return f"Rp {int(angka):,}".replace(",", ".")
 
-def kirim_telegram(pesan):
-    if "PASTE_TOKEN" in TOKEN_BOT: return
+# --- FUNGSI BARU: KIRIM KE WHATSAPP VIA FONNTE ---
+def kirim_whatsapp(pesan):
+    if "PASTE_ID" in TARGET_WA: return # Cegah error jika ID belum diisi
     try:
-        url = f"https://api.telegram.org/bot{TOKEN_BOT}/sendMessage"
-        requests.post(url, data={"chat_id": ID_OWNER, "text": pesan}, timeout=3)
-    except: pass
+        url = "https://api.fonnte.com/send"
+        headers = {
+            'Authorization': TOKEN_FONNTE
+        }
+        data = {
+            'target': TARGET_WA,
+            'message': pesan
+        }
+        requests.post(url, headers=headers, data=data, timeout=5)
+    except Exception as e:
+        print(f"Gagal kirim WA: {e}")
 
 def load_json(filename):
     if os.path.exists(filename):
@@ -171,7 +180,6 @@ def simpan_ke_excel_staff(list_transaksi, nama_staff, uang_tunai, uang_qris, tot
     try:
         nama_file = get_nama_file_excel(nama_staff)
         
-        # PERBAIKAN URUTAN: Masukkan data sesuai permintaan awal
         data_row = {
             "TANGGAL": get_wib_now().strftime("%Y-%m-%d"),
             "JAM": get_wib_now().strftime("%H:%M"),
@@ -198,12 +206,9 @@ def simpan_ke_excel_staff(list_transaksi, nama_staff, uang_tunai, uang_qris, tot
         else:
             df_final = df_baru.fillna(0)
             
-        # --- LOGIKA PENJAGA URUTAN KOLOM EXCEL ---
         kolom_utama = ["TANGGAL", "JAM", "NAMA", "GEROBAK", "CASH", "QRIS", "TOTAL OMZET"]
-        # Ambil kolom menu yang ada di file, tapi pisahkan dari kolom utama & catatan
         kolom_menu = [col for col in df_final.columns if col not in kolom_utama and col != "CATATAN"]
         
-        # Gabungkan menjadi urutan yang pasti: Utama -> Menu -> Catatan
         urutan_final = kolom_utama + kolom_menu
         if "CATATAN" in df_final.columns:
             urutan_final.append("CATATAN")
@@ -251,7 +256,7 @@ def main():
                 if st.button("Daftarkan Staff"): 
                     if not nm or not pn: st.error("Nama dan PIN wajib diisi!")
                     elif simpan_staff_baru(nm, pn): 
-                        st.success(f"Staff {nm} Terdaftar!"); kirim_telegram(f"🆕 STAFF BARU: {nm} ({pn})")
+                        st.success(f"Staff {nm} Terdaftar!"); kirim_whatsapp(f"🆕 *STAFF BARU:* {nm} ({pn})")
                     else: st.error("PIN Sudah Dipakai")
         else:
             st.success(f"Halo, {st.session_state['user_nama']}")
@@ -372,7 +377,7 @@ def main():
                                 for f in file_excel: os.remove(f)
                                 
                                 st.success("✅ SYSTEM RESET BERHASIL!")
-                                kirim_telegram("⚠️ SYSTEM ALERT: OWNER MELAKUKAN FULL RESET DATA.")
+                                kirim_whatsapp("⚠️ *SYSTEM ALERT:* OWNER MELAKUKAN FULL RESET DATA.")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Gagal Reset: {e}")
@@ -420,7 +425,7 @@ def main():
                             }
                             save_json(FILE_DB_SURAT_JALAN, db_sj)
                             
-                            kirim_telegram(f"🚚 **SURAT JALAN BARU**\nTujuan: {sj_lokasi}\n\n**Barang Dikirim:**{sj_catatan_text}\n\nMenunggu konfirmasi staff.")
+                            kirim_whatsapp(f"🚚 *SURAT JALAN BARU*\nTujuan: {sj_lokasi}\n\n*Barang Dikirim:*{sj_catatan_text}\n\n_Menunggu konfirmasi staff._")
                             st.success("Surat Jalan berhasil dikirim ke staff!")
                             st.rerun()
 
@@ -491,9 +496,9 @@ def main():
                         
                         db_gerobak[pilihan_gerobak]['stok'] = stok_aktif
                         save_json(FILE_DB_GEROBAK, db_gerobak)
-                        pesan_tambahan_bot = "\n*(Stok berhasil ditambahkan otomatis ke menu closing)*"
+                        pesan_tambahan_bot = "\n_(Stok berhasil ditambahkan otomatis ke menu closing)_"
 
-                    kirim_telegram(f"✅ **BARANG DITERIMA (Tambahan Stok Jualan)**\nTujuan: {pilihan_gerobak}\nPenerima: {user}\nJam: {get_wib_now().strftime('%H:%M')}{pesan_tambahan_bot}")
+                    kirim_whatsapp(f"✅ *BARANG DITERIMA (Tambahan Stok Jualan)*\nTujuan: {pilihan_gerobak}\nPenerima: {user}\nJam: {get_wib_now().strftime('%H:%M')}{pesan_tambahan_bot}")
                     st.success("Barang berhasil dikonfirmasi masuk!")
                     st.rerun()
 
@@ -536,7 +541,7 @@ def main():
                         d = {"tanggal": get_wib_now().strftime("%Y-%m-%d"), "jam_masuk": jam_skrg, "pic": user, "pin_pic": pin, "stok": stok_input}
                         db_gerobak[pilihan_gerobak] = d; save_json(FILE_DB_GEROBAK, db_gerobak)
                         
-                        kirim_telegram(f"☀️ OPENING {pilihan_gerobak}\n👤 {user}\n⏰ {jam_skrg}\n\n**STOK AWAL:**{list_stok_text}")
+                        kirim_whatsapp(f"☀️ *OPENING {pilihan_gerobak}*\n👤 {user}\n⏰ {jam_skrg}\n\n*STOK AWAL:*{list_stok_text}")
                         st.success("Buka!"); st.rerun()
 
         with t_cl:
@@ -590,14 +595,14 @@ def main():
                                     rincian_text += f"\n▫️ [{item['KATEGORI']}] {item['ITEM']}: {item['TERJUAL']}"
                             if not rincian_text: rincian_text = "\n(Nihil)"
 
-                            msg = (f"🌙 CLOSING {pilihan_gerobak}\n👤 {user}\n\n"
-                                   f"📊 **RINCIAN TERJUAL:**{rincian_text}\n\n"
-                                   f"💵 **Tunai:** {format_rupiah(uang_tunai)}\n"
-                                   f"💳 **QRIS:** {format_rupiah(uang_qris)}\n"
-                                   f"💰 **Total Setor:** {format_rupiah(total_setor)}\n"
-                                   f"📝 **Catatan:** {catatan}")
+                            msg = (f"🌙 *CLOSING {pilihan_gerobak}*\n👤 {user}\n\n"
+                                   f"📊 *RINCIAN TERJUAL:*{rincian_text}\n\n"
+                                   f"💵 *Tunai:* {format_rupiah(uang_tunai)}\n"
+                                   f"💳 *QRIS:* {format_rupiah(uang_qris)}\n"
+                                   f"💰 *Total Setor:* {format_rupiah(total_setor)}\n"
+                                   f"📝 *Catatan:* {catatan}")
 
-                            kirim_telegram(msg)
+                            kirim_whatsapp(msg)
                             
                             if pilihan_gerobak in db_gerobak:
                                 del db_gerobak[pilihan_gerobak]; save_json(FILE_DB_GEROBAK, db_gerobak)
