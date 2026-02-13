@@ -15,10 +15,11 @@ PIN_OWNER_LOGIN = "8888" # PIN untuk Login ke Menu Owner
 PASSWORD_RESET  = "ciroclistopel" # Password khusus untuk Hapus Data
 
 # ================= 2. DATABASE & FILE =================
-FILE_DB_GEROBAK = "database_gerobak.json" 
-FILE_DB_STAFF   = "database_staff.json"   
-FILE_DB_MENU    = "database_menu.json"    
-FILE_DB_LOKASI  = "database_lokasi.json"  
+FILE_DB_GEROBAK     = "database_gerobak.json" 
+FILE_DB_STAFF       = "database_staff.json"   
+FILE_DB_MENU        = "database_menu.json"    
+FILE_DB_LOKASI      = "database_lokasi.json"  
+FILE_DB_SURAT_JALAN = "database_surat_jalan.json" # <--- DB SURAT JALAN BARU
 
 # --- DATA DEFAULT (3 KATEGORI) ---
 MENU_DEFAULT = {
@@ -263,7 +264,8 @@ def main():
             c2.metric("Total Staff", f"{len(ds)}")
             c3.metric("Total Menu", f"{total_menu}")
             
-            t1, t2, t3, t4, t5 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "📥 Laporan"])
+            # --- TAB DITAMBAH 1 UNTUK SURAT JALAN ---
+            t1, t2, t3, t4, t5, t6 = st.tabs(["🛒 Cek Toko", "👥 Staff", "📋 Menu", "📍 Lokasi", "📥 Laporan", "🚚 Surat Jalan"])
             
             with t1: 
                 if not db_gerobak: st.caption("Semua gerobak tutup.")
@@ -343,7 +345,7 @@ def main():
 
                 st.divider()
                 st.error("⚠️ RESET SEMUA DATA (DANGER)")
-                st.write("Menghapus: Staff, Menu, Lokasi, dan Semua Laporan.")
+                st.write("Menghapus: Staff, Menu, Lokasi, Surat Jalan, dan Semua Laporan.")
                 
                 with st.expander("🔴 Buka Menu Reset"):
                     password_reset = st.text_input("Masukkan Password Reset:", type="password")
@@ -351,8 +353,8 @@ def main():
                     if st.button("🔥 PIKIA-PIKIA BANA LUU"):
                         if password_reset == PASSWORD_RESET: # Cek Password ciroclistopel
                             try:
-                                # Hapus DB JSON
-                                files_db = [FILE_DB_GEROBAK, FILE_DB_STAFF, FILE_DB_MENU, FILE_DB_LOKASI]
+                                # Hapus DB JSON TERMASUK SURAT JALAN
+                                files_db = [FILE_DB_GEROBAK, FILE_DB_STAFF, FILE_DB_MENU, FILE_DB_LOKASI, FILE_DB_SURAT_JALAN]
                                 for fdb in files_db:
                                     if os.path.exists(fdb): os.remove(fdb)
                                 
@@ -367,6 +369,51 @@ def main():
                                 st.error(f"Gagal Reset: {e}")
                         else:
                             st.error("⛔ Password Salah!")
+                            
+            # --- TAB 6 BARU: SURAT JALAN ---
+            with t6:
+                st.subheader("🚚 Buat Surat Jalan Baru")
+                if not LOKASI_SEKARANG:
+                    st.warning("Belum ada lokasi gerobak.")
+                else:
+                    sj_lokasi = st.selectbox("Tujuan Gerobak:", list(LOKASI_SEKARANG.values()), key="sj_lokasi")
+                    sj_catatan = st.text_area("Daftar Barang yang Dikirim (Susu, Cup, dll):", placeholder="Contoh:\n- 10 Botol Susu Fresh Milk\n- 50 Cup Regular\n- 1 Bungkus Es Batu")
+                    
+                    if st.button("Kirim Surat Jalan"):
+                        if sj_catatan.strip() == "":
+                            st.error("Daftar barang tidak boleh kosong!")
+                        else:
+                            db_sj = load_json(FILE_DB_SURAT_JALAN)
+                            id_sj = f"SJ-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                            
+                            db_sj[id_sj] = {
+                                "tanggal": get_wib_now().strftime("%Y-%m-%d %H:%M"),
+                                "tujuan": sj_lokasi,
+                                "barang": sj_catatan,
+                                "status": "Menunggu Konfirmasi",
+                                "penerima": "-"
+                            }
+                            save_json(FILE_DB_SURAT_JALAN, db_sj)
+                            
+                            kirim_telegram(f"🚚 **SURAT JALAN BARU**\nTujuan: {sj_lokasi}\n\n**Barang:**\n{sj_catatan}\n\nMenunggu konfirmasi staff.")
+                            st.success("Surat Jalan berhasil dikirim ke staff!")
+                            st.rerun()
+
+                st.divider()
+                st.write("**Riwayat Surat Jalan Terakhir**")
+                db_sj = load_json(FILE_DB_SURAT_JALAN)
+                if db_sj:
+                    for id_sj, data_sj in reversed(list(db_sj.items())):
+                        status_icon = "⏳" if data_sj['status'] == "Menunggu Konfirmasi" else "✅"
+                        with st.expander(f"{status_icon} {data_sj['tanggal']} | Tujuan: {data_sj['tujuan']}"):
+                            st.write(f"**Barang:**\n{data_sj['barang']}")
+                            st.write(f"**Status:** {data_sj['status']} (Penerima: {data_sj['penerima']})")
+                            if st.button(f"Hapus Riwayat", key=f"del_sj_{id_sj}"):
+                                del db_sj[id_sj]
+                                save_json(FILE_DB_SURAT_JALAN, db_sj)
+                                st.rerun()
+                else:
+                    st.caption("Belum ada riwayat surat jalan.")
 
             st.divider()
 
@@ -391,6 +438,28 @@ def main():
             else: st.error(f"⛔ SEDANG DIPAKAI: {shift_aktif_di_lokasi['pic']}")
         else: st.info(f"🟢 {pilihan_gerobak} Kosong.")
 
+        # --- CEK SURAT JALAN UNTUK STAFF ---
+        db_sj = load_json(FILE_DB_SURAT_JALAN)
+        ada_surat_jalan = False
+        
+        for id_sj, data_sj in db_sj.items():
+            if data_sj['tujuan'] == pilihan_gerobak and data_sj['status'] == "Menunggu Konfirmasi":
+                ada_surat_jalan = True
+                st.warning("🚚 **ADA BARANG MASUK DARI GUDANG!**")
+                st.info(f"**Daftar Barang:**\n{data_sj['barang']}")
+                if st.button("✅ Konfirmasi Terima Barang", key=f"terima_{id_sj}"):
+                    data_sj['status'] = "Diterima"
+                    data_sj['penerima'] = user
+                    save_json(FILE_DB_SURAT_JALAN, db_sj)
+                    kirim_telegram(f"✅ **BARANG DITERIMA**\nTujuan: {pilihan_gerobak}\nPenerima: {user}\nJam: {get_wib_now().strftime('%H:%M')}")
+                    st.success("Barang berhasil dikonfirmasi masuk!")
+                    st.rerun()
+
+        if ada_surat_jalan:
+            st.error("⚠️ Anda wajib mengonfirmasi penerimaan Surat Jalan di atas sebelum bisa mengakses menu Gerobak.")
+            st.stop() # Hentikan proses ke bawah agar staff wajib konfirmasi dulu
+
+        # --- TABS BUKA/TUTUP TOKO STAFF ---
         t_op, t_cl = st.tabs(["☀️ BUKA TOKO", "🌙 TUTUP TOKO"])
 
         with t_op:
