@@ -257,9 +257,7 @@ def main():
                     if not nm or not pn: st.error("Nama dan PIN wajib diisi!")
                     elif simpan_staff_baru(nm, pn): 
                         st.success(f"Staff {nm} Terdaftar!")
-                        tgl_daftar = get_wib_now().strftime("%d-%m-%Y")
-                        jam_daftar = get_wib_now().strftime("%H:%M WIB")
-                        kirim_whatsapp(f"🆕 *INFO STAFF BARU*\n📅 Tanggal: {tgl_daftar}\n⏰ Waktu: {jam_daftar}\n👤 Nama: {nm} ({pn})")
+                        # PENGIRIMAN NOTIFIKASI WA UNTUK STAFF BARU DIHAPUS DI SINI
                     else: st.error("PIN Sudah Dipakai")
         else:
             st.success(f"Halo, {st.session_state['user_nama']}")
