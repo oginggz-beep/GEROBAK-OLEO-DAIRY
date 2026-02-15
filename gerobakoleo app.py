@@ -1,4 +1,4 @@
-6import streamlit as st
+import streamlit as st
 import json
 import os
 import requests
@@ -258,6 +258,7 @@ def main():
                     if not nm or not pn: st.error("Nama dan PIN wajib diisi!")
                     elif simpan_staff_baru(nm, pn): 
                         st.success(f"Staff {nm} Terdaftar!")
+                        # PENGIRIMAN NOTIFIKASI WA UNTUK STAFF BARU DIHAPUS DI SINI
                     else: st.error("PIN Sudah Dipakai")
         else:
             st.success(f"Halo, {st.session_state['user_nama']}")
@@ -442,9 +443,11 @@ def main():
                     for id_sj, data_sj in reversed(list(db_sj.items())):
                         status_icon = "⏳" if data_sj['status'] == "Menunggu Konfirmasi" else "✅"
                         with st.expander(f"{status_icon} {data_sj['tanggal']} | Tujuan: {data_sj['tujuan']}"):
-                            st.write(f"**Status:** {data_sj['status']} (Penerima: {data_sj['penerima']})")
-                            
-                            st.write(f"**Status:** {data_sj['status']} (Penerima: {data_sj['penerima']})")
+                            # Penambahan pengaman pembacaan dictionary pada history surat jalan
+                            barang_txt = data_sj.get('barang_text', data_sj.get('barang', ''))
+                            penerima_txt = data_sj.get('penerima', '-')
+                            st.write(f"**Barang:**{barang_txt}")
+                            st.write(f"**Status:** {data_sj['status']} (Penerima: {penerima_txt})")
                             
                             if st.button(f"Hapus Riwayat", key=f"del_sj_{id_sj}"):
                                 del db_sj[id_sj]
@@ -558,9 +561,9 @@ def main():
                             "pic": user, 
                             "pin_pic": pin, 
                             "stok": stok_input,
-                            "terjual": {},           # Untuk melacak penjualan kasir
-                            "omzet_cash": 0,         # Untuk melacak cash real-time
-                            "omzet_qris": 0,         # Untuk melacak qris real-time
+                            "terjual": {},           
+                            "omzet_cash": 0,         
+                            "omzet_qris": 0,         
                             "uang_kembalian": uang_kembalian_input
                         }
                         db_gerobak[pilihan_gerobak] = d; save_json(FILE_DB_GEROBAK, db_gerobak)
@@ -586,7 +589,6 @@ def main():
                             
                             with cols[i%3]:
                                 if st.button(f"{m}\n{format_rupiah(hrg)}\n(Stok: {stok_tersedia})", key=f"pos_{key_unik}", disabled=(stok_tersedia<=0), use_container_width=True):
-                                    # Tambah ke keranjang
                                     if key_unik in st.session_state['keranjang_kasir']:
                                         if st.session_state['keranjang_kasir'][key_unik]['qty'] < stok_tersedia:
                                             st.session_state['keranjang_kasir'][key_unik]['qty'] += 1
@@ -614,24 +616,21 @@ def main():
                         metode_bayar = st.radio("Metode Pembayaran:", ["Tunai (CASH)", "QRIS"])
 
                         if st.button("💳 PROSES BAYAR", use_container_width=True, type="primary"):
-                            # Tarik data dari DB untuk di-update
                             db_upd = load_json(FILE_DB_GEROBAK)
                             shift_upd = db_upd[pilihan_gerobak]
 
-                            # Kurangi stok & Tambah data Terjual
                             for k_cart, v_cart in st.session_state['keranjang_kasir'].items():
                                 qty_beli = v_cart['qty']
                                 shift_upd['stok'][k_cart] -= qty_beli
                                 shift_upd['terjual'][k_cart] = shift_upd.get('terjual', {}).get(k_cart, 0) + qty_beli
 
-                            # Tambah ke Omzet Real-time
                             if "CASH" in metode_bayar:
                                 shift_upd['omzet_cash'] = shift_upd.get('omzet_cash', 0) + total_belanja
                             else:
                                 shift_upd['omzet_qris'] = shift_upd.get('omzet_qris', 0) + total_belanja
 
                             save_json(FILE_DB_GEROBAK, db_upd)
-                            st.session_state['keranjang_kasir'] = {} # Kosongkan keranjang
+                            st.session_state['keranjang_kasir'] = {} 
                             st.toast("✅ Transaksi Berhasil Dicatat!")
                             st.rerun()
 
@@ -682,10 +681,7 @@ def main():
                 uang_qris = int(c2.number_input("QRIS Aktual (Cek mutasi/mesin EDC)", step=500, value=omzet_qris_sistem, key="uang_qris"))
                 catatan = st.text_area("Catatan", key="catatan_closing")
                 
-                # Validasi Total Setor Aktual = Total Cash Aktual + Total Qris Aktual
                 total_setor_aktual = uang_tunai + uang_qris
-                
-                # Uang yang seharusnya ada = (Cash Kasir + Modal) + Qris Kasir
                 target_setor_keseluruhan = target_uang_fisik + omzet_qris_sistem
                 selisih = total_setor_aktual - target_setor_keseluruhan
                 
@@ -694,12 +690,9 @@ def main():
                     if st.button("🔒 TUTUP SHIFT & KIRIM", key="btn_close"):
                         
                         with st.spinner("Memproses..."):
-                            
-                            # Excel hanya menerima Omzet Murni (uang kembalian dikurangi dari cash laci)
                             excel_tunai = uang_tunai - uang_kembalian_awal
                             excel_total = excel_tunai + uang_qris
                             
-                            # Tambahkan data dummy agar excel tidak error jika tidak ada penjualan sama sekali
                             if not list_penjualan_temporary:
                                 list_penjualan_temporary.append({"KATEGORI": "-", "ITEM": "Tidak ada penjualan", "HARGA": 0, "TERJUAL": 0, "TIPE": "JUAL", "GEROBAK": pilihan_gerobak})
 
@@ -716,7 +709,6 @@ def main():
                             tgl_tutup = get_wib_now().strftime("%d-%m-%Y")
                             jam_tutup = get_wib_now().strftime("%H:%M WIB")
 
-                            # WA mengikuti format sebelumnya
                             msg = (f"🌙 *LAPORAN CLOSING SHIFT*\n"
                                    f"📅 Tanggal: {tgl_tutup}\n"
                                    f"⏰ Waktu: {jam_tutup}\n"
