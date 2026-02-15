@@ -1,4 +1,4 @@
-import streamlit as st
+6import streamlit as st
 import json
 import os
 import requests
@@ -444,7 +444,8 @@ def main():
                         with st.expander(f"{status_icon} {data_sj['tanggal']} | Tujuan: {data_sj['tujuan']}"):
                             st.write(f"**Status:** {data_sj['status']} (Penerima: {data_sj['penerima']})")
                             
-                            st.write(f"**Status:** {data_sj['status']} (Penerima']})")
+                            st.write(f"**Status:** {data_sj['status']} (Penerima: {data_sj['penerima']})")
+                            
                             if st.button(f"Hapus Riwayat", key=f"del_sj_{id_sj}"):
                                 del db_sj[id_sj]
                                 save_json(FILE_DB_SURAT_JALAN, db_sj)
