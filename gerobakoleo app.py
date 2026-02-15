@@ -442,7 +442,8 @@ def main():
                     for id_sj, data_sj in reversed(list(db_sj.items())):
                         status_icon = "⏳" if data_sj['status'] == "Menunggu Konfirmasi" else "✅"
                         with st.expander(f"{status_icon} {data_sj['tanggal']} | Tujuan: {data_sj['tujuan']}"):
-                            st.write(f"**Barang:**{data_sj.get('barang_text', data_sj.get('barang', ''))}")
+                            st.write(f"**Status:** {data_sj['status']} (Penerima: {data_sj['penerima']})")
+                            
                             st.write(f"**Status:** {data_sj['status']} (Penerima']})")
                             if st.button(f"Hapus Riwayat", key=f"del_sj_{id_sj}"):
                                 del db_sj[id_sj]
